@@ -1,0 +1,127 @@
+:root {
+  --bg: #0a0a18;
+  --wall: #1d1d3a;
+  --accent: #f6d646;
+  --accent-2: #6ef5c6;
+  --ghost-1: #ff4b8b;
+  --ghost-2: #53a4ff;
+  --ghost-3: #ff8c42;
+  --text: #f5f5ff;
+  --grid-size: 24px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Press Start 2P', system-ui, sans-serif;
+  background: radial-gradient(circle at 20% 20%, #1a1a3c, #06060f 40%),
+    radial-gradient(circle at 80% 10%, #191932, #0a0a18 50%),
+    #06060f;
+  color: var(--text);
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 16px 32px;
+}
+
+.hud {
+  width: min(960px, 95vw);
+  background: rgba(15, 15, 35, 0.75);
+  border: 2px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 16px 20px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
+}
+
+.title {
+  font-size: 20px;
+  color: var(--accent);
+  text-align: center;
+  text-shadow: 0 0 8px rgba(246, 214, 70, 0.65), 0 0 16px rgba(110, 245, 198, 0.35);
+  margin-bottom: 12px;
+}
+
+.controls {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: #cdd2ff;
+}
+
+.stats {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+button {
+  background: linear-gradient(135deg, #20204d, #101022);
+  color: var(--text);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-family: 'Press Start 2P', system-ui, sans-serif;
+  font-size: 11px;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+button:hover {
+  transform: translateY(-2px);
+  border-color: rgba(246, 214, 70, 0.45);
+  box-shadow: 0 12px 32px rgba(246, 214, 70, 0.18);
+}
+
+.canvas-wrap {
+  margin-top: 16px;
+  background: radial-gradient(circle at 20% 20%, rgba(246, 214, 70, 0.05), transparent 45%),
+    radial-gradient(circle at 80% 0%, rgba(110, 245, 198, 0.1), transparent 40%),
+    rgba(8, 8, 16, 0.9);
+  padding: 14px;
+  border-radius: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.07);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
+}
+
+#game {
+  background: #05050b;
+  border-radius: 12px;
+  display: block;
+}
+
+.footer {
+  margin-top: 12px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.65);
+  text-align: center;
+}
+
+@media (max-width: 720px) {
+  body {
+    padding: 16px 10px 24px;
+  }
+
+  #game {
+    width: 100%;
+    height: auto;
+  }
+
+  .hud {
+    padding: 12px 14px;
+  }
+}
