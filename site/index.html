@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wack-Man</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --accent: #faae2b;
+      --bg: #0e0e10;
+      --card: rgba(255, 255, 255, 0.08);
+      --text: #f5f5f5;
+      --muted: #c8c8d0;
+      --border: rgba(255, 255, 255, 0.2);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: radial-gradient(circle at 20% 20%, rgba(250, 174, 43, 0.16), transparent 30%),
+                  radial-gradient(circle at 80% 0%, rgba(250, 174, 43, 0.12), transparent 28%),
+                  var(--bg);
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 48px 16px;
+    }
+
+    .card {
+      width: min(720px, 100%);
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 32px;
+      box-shadow: 0 20px 80px rgba(0, 0, 0, 0.35);
+      backdrop-filter: blur(6px);
+    }
+
+    h1 {
+      margin: 0 0 12px;
+      font-size: clamp(32px, 3vw, 42px);
+      letter-spacing: -0.5px;
+    }
+
+    p {
+      color: var(--muted);
+      line-height: 1.6;
+      font-size: 17px;
+      margin: 0 0 20px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(250, 174, 43, 0.15);
+      color: var(--text);
+      padding: 10px 14px;
+      border-radius: 999px;
+      border: 1px solid rgba(250, 174, 43, 0.4);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      font-size: 13px;
+    }
+
+    ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: grid;
+      gap: 12px;
+    }
+
+    li {
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    footer {
+      margin-top: 20px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    a {
+      color: var(--accent);
+      font-weight: 600;
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="pill">GitHub Pages preview</div>
+    <h1>Welcome to the Wack-Man homepage</h1>
+    <p>This repository now ships with an automatic GitHub Pages deployment so you can preview the project instantly after each push. Drop your game build or documentation into the <code>site/</code> folder, and it will be published for you.</p>
+
+    <h2>What to do next</h2>
+    <ul>
+      <li><strong>Customize the page:</strong> Replace this file at <code>site/index.html</code> with your own content.</li>
+      <li><strong>Trigger a deploy:</strong> Push changes to the <code>work</code> branch to kick off the GitHub Actions workflow.</li>
+      <li><strong>Share the link:</strong> After the first successful run, your page will be live at the repository's GitHub Pages URL.</li>
+    </ul>
+
+    <footer>
+      Need help? Check the repository's Actions tab to monitor the <em>Deploy static content to Pages</em> workflow and find the published link after the deploy finishes.
+    </footer>
+  </main>
+</body>
+</html>
