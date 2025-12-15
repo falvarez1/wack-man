@@ -2,7 +2,9 @@ name: Deploy static content to Pages
 
 on:
   push:
-    branches: ["work"]
+    branches:
+      - work
+      - copilot/trigger-github-pages-action
   workflow_dispatch:
 
 permissions:
