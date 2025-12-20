@@ -762,11 +762,31 @@ function wrapPosition(entity) {
 
 function tryTurn(player) {
   if (player.queued.x === 0 && player.queued.y === 0) return;
-  const nx = Math.floor((player.x + player.queued.x * tileSize / 2) / tileSize);
-  const ny = Math.floor((player.y + player.queued.y * tileSize / 2) / tileSize);
-  if (!isWall(nx, ny)) {
+
+  // Calculate the tile center position
+  const tileCenterX = Math.floor(player.x / tileSize) * tileSize + tileSize / 2;
+  const tileCenterY = Math.floor(player.y / tileSize) * tileSize + tileSize / 2;
+
+  // Check if we're close enough to tile center to turn
+  const distToCenter = Math.hypot(player.x - tileCenterX, player.y - tileCenterY);
+  if (distToCenter > tileSize / 3) {
+    // Not at an intersection yet, keep current direction
+    return;
+  }
+
+  // Check if the turn direction is valid (not a wall)
+  const currentTileX = Math.floor(player.x / tileSize);
+  const currentTileY = Math.floor(player.y / tileSize);
+  const nextTileX = currentTileX + player.queued.x;
+  const nextTileY = currentTileY + player.queued.y;
+
+  if (!isWall(nextTileX, nextTileY)) {
+    // Valid turn - snap to center and change direction
+    player.x = tileCenterX;
+    player.y = tileCenterY;
     player.dir = { ...player.queued };
   }
+  // Note: Don't clear queued direction - allow the player to buffer turns
 }
 
 function movePlayer(player, dt) {
@@ -774,41 +794,44 @@ function movePlayer(player, dt) {
 
   tryTurn(player);
   const speed = baseSpeed + (level - 1) * 5;
-  const effectiveRadius = playerRadius + collisionPadding;
 
   // Calculate tile center for snapping
   const tileCenterX = Math.floor(player.x / tileSize) * tileSize + tileSize / 2;
   const tileCenterY = Math.floor(player.y / tileSize) * tileSize + tileSize / 2;
 
-  // Snap to center of lane perpendicular to movement direction
-  // This prevents drifting within corridors
+  // Always snap to center of lane perpendicular to movement direction
+  // This prevents drifting within corridors and the "wall stopping" bug
+  // Use aggressive snapping to keep player centered
+  const snapSpeed = 0.4;
+
   if (player.dir.x !== 0) {
-    // Moving horizontally - snap Y to center
-    const snapSpeed = 0.3;
-    const targetY = tileCenterY;
-    const newY = player.y + (targetY - player.y) * snapSpeed;
-    // Only snap if it won't cause a wall collision
-    if (!wouldCollideWithWall(player.x, newY, effectiveRadius)) {
-      player.y = newY;
+    // Moving horizontally - force snap Y to center
+    const diffY = tileCenterY - player.y;
+    if (Math.abs(diffY) > 0.5) {
+      player.y += diffY * snapSpeed;
+    } else {
+      player.y = tileCenterY; // Snap exactly when close enough
     }
   }
   if (player.dir.y !== 0) {
-    // Moving vertically - snap X to center
-    const snapSpeed = 0.3;
-    const targetX = tileCenterX;
-    const newX = player.x + (targetX - player.x) * snapSpeed;
-    // Only snap if it won't cause a wall collision
-    if (!wouldCollideWithWall(newX, player.y, effectiveRadius)) {
-      player.x = newX;
+    // Moving vertically - force snap X to center
+    const diffX = tileCenterX - player.x;
+    if (Math.abs(diffX) > 0.5) {
+      player.x += diffX * snapSpeed;
+    } else {
+      player.x = tileCenterX; // Snap exactly when close enough
     }
   }
+
+  // For forward collision, use a slightly smaller radius to avoid edge cases
+  const forwardRadius = playerRadius;
 
   // Calculate movement with proper collision detection
   const moveDistance = speed * dt;
   const maxDistance = getMaxMoveDistance(
     player.x, player.y,
     player.dir.x, player.dir.y,
-    moveDistance, effectiveRadius
+    moveDistance, forwardRadius
   );
 
   if (maxDistance > 0.1) {
@@ -821,8 +844,8 @@ function movePlayer(player, dt) {
     player.y += player.dir.y * maxDistance;
   }
 
-  // If we couldn't move the full distance, we hit a wall
-  if (maxDistance < moveDistance * 0.9 && (player.dir.x !== 0 || player.dir.y !== 0)) {
+  // Only stop if we truly hit a wall (not just edge collision)
+  if (maxDistance < moveDistance * 0.5 && (player.dir.x !== 0 || player.dir.y !== 0)) {
     // Stop movement in this direction
     player.dir = { x: 0, y: 0 };
   }
@@ -899,10 +922,18 @@ function moveGhost(ghost, dt) {
 
   switch (ghost.mode) {
     case GHOST_MODE.EATEN:
-      target = { x: ghostHouseCenter.x * tileSize, y: ghostHouseCenter.y * tileSize };
+      // Target the gate entrance first, then the center
+      const gateY = ghostHouseExit.y * tileSize + tileSize;
+      if (ghost.y < gateY - tileSize / 2) {
+        // Above the gate - target the gate position
+        target = { x: ghostHouseExit.x * tileSize + tileSize / 2, y: gateY };
+      } else {
+        // At or below gate level - target center
+        target = { x: ghostHouseCenter.x * tileSize + tileSize / 2, y: ghostHouseCenter.y * tileSize + tileSize / 2 };
+      }
       break;
     case GHOST_MODE.EXITING:
-      target = { x: ghostHouseExit.x * tileSize, y: ghostHouseExit.y * tileSize };
+      target = { x: ghostHouseExit.x * tileSize + tileSize / 2, y: ghostHouseExit.y * tileSize + tileSize / 2 };
       break;
     case GHOST_MODE.FRIGHTENED:
       target = null;
@@ -919,51 +950,98 @@ function moveGhost(ghost, dt) {
       break;
   }
 
-  const options = [
-    { x: 1, y: 0 },
-    { x: -1, y: 0 },
-    { x: 0, y: 1 },
-    { x: 0, y: -1 },
-  ].filter((d) => !(d.x === -ghost.dir.x && d.y === -ghost.dir.y && !ghost.inHouse));
+  // Calculate tile center
+  const tileCenterX = Math.floor(ghost.x / tileSize) * tileSize + tileSize / 2;
+  const tileCenterY = Math.floor(ghost.y / tileSize) * tileSize + tileSize / 2;
+  const distToCenter = Math.hypot(ghost.x - tileCenterX, ghost.y - tileCenterY);
+
+  // Only make direction decisions at tile centers (intersections)
+  const atIntersection = distToCenter < speed * 2;
 
   const isExitingOrEaten = ghost.mode === GHOST_MODE.EXITING || ghost.mode === GHOST_MODE.EATEN;
 
-  const validOptions = options.filter((d) => {
-    const checkX = Math.floor((ghost.x + d.x * tileSize / 2) / tileSize);
-    const checkY = Math.floor((ghost.y + d.y * tileSize / 2) / tileSize);
-    return isPassable(checkX, checkY, true, isExitingOrEaten);
-  });
+  // Allow reverse direction for eaten ghosts and ghosts in house
+  const canReverse = ghost.eaten || ghost.inHouse;
 
-  let bestDir;
+  if (atIntersection) {
+    // Snap to center before making decision
+    ghost.x = tileCenterX;
+    ghost.y = tileCenterY;
 
-  if (ghost.mode === GHOST_MODE.FRIGHTENED) {
-    bestDir = validOptions[Math.floor(Math.random() * validOptions.length)];
-  } else if (target) {
-    bestDir = validOptions.sort((a, b) => {
-      const da = Math.hypot(target.x - (ghost.x + a.x * tileSize), target.y - (ghost.y + a.y * tileSize));
-      const db = Math.hypot(target.x - (ghost.x + b.x * tileSize), target.y - (ghost.y + b.y * tileSize));
-      return da - db;
-    })[0];
+    const options = [
+      { x: 1, y: 0 },
+      { x: -1, y: 0 },
+      { x: 0, y: 1 },
+      { x: 0, y: -1 },
+    ].filter((d) => {
+      // Don't allow 180 turn unless we can reverse
+      if (!canReverse && d.x === -ghost.dir.x && d.y === -ghost.dir.y) {
+        return false;
+      }
+      return true;
+    });
+
+    const currentTileX = Math.floor(ghost.x / tileSize);
+    const currentTileY = Math.floor(ghost.y / tileSize);
+
+    const validOptions = options.filter((d) => {
+      const nextTileX = currentTileX + d.x;
+      const nextTileY = currentTileY + d.y;
+      return isPassable(nextTileX, nextTileY, true, isExitingOrEaten);
+    });
+
+    let bestDir;
+
+    if (validOptions.length === 0) {
+      // No valid options - allow any direction including reverse
+      const allOptions = [
+        { x: 1, y: 0 },
+        { x: -1, y: 0 },
+        { x: 0, y: 1 },
+        { x: 0, y: -1 },
+      ];
+      const fallbackOptions = allOptions.filter((d) => {
+        const nextTileX = currentTileX + d.x;
+        const nextTileY = currentTileY + d.y;
+        return isPassable(nextTileX, nextTileY, true, isExitingOrEaten);
+      });
+      bestDir = fallbackOptions[0] || ghost.dir;
+    } else if (ghost.mode === GHOST_MODE.FRIGHTENED) {
+      bestDir = validOptions[Math.floor(Math.random() * validOptions.length)];
+    } else if (target) {
+      bestDir = validOptions.sort((a, b) => {
+        const nextAX = (currentTileX + a.x) * tileSize + tileSize / 2;
+        const nextAY = (currentTileY + a.y) * tileSize + tileSize / 2;
+        const nextBX = (currentTileX + b.x) * tileSize + tileSize / 2;
+        const nextBY = (currentTileY + b.y) * tileSize + tileSize / 2;
+        const da = Math.hypot(target.x - nextAX, target.y - nextAY);
+        const db = Math.hypot(target.x - nextBX, target.y - nextBY);
+        return da - db;
+      })[0];
+    } else {
+      bestDir = validOptions[0];
+    }
+
+    if (bestDir) ghost.dir = bestDir;
+  }
+
+  // Continue moving in current direction
+  const nextX = ghost.x + ghost.dir.x * speed;
+  const nextY = ghost.y + ghost.dir.y * speed;
+
+  // Check if we can continue in current direction
+  const nextTileX = Math.floor(nextX / tileSize);
+  const nextTileY = Math.floor(nextY / tileSize);
+
+  if (isPassable(nextTileX, nextTileY, true, isExitingOrEaten)) {
+    ghost.x = nextX;
+    ghost.y = nextY;
   } else {
-    bestDir = validOptions[0];
+    // Hit a wall - snap to center and try to find new direction
+    ghost.x = tileCenterX;
+    ghost.y = tileCenterY;
   }
 
-  if (bestDir) ghost.dir = bestDir;
-
-  // Calculate tile center for snapping
-  const tileCenterX = Math.floor(ghost.x / tileSize) * tileSize + tileSize / 2;
-  const tileCenterY = Math.floor(ghost.y / tileSize) * tileSize + tileSize / 2;
-
-  // Snap ghosts to center of lane perpendicular to movement
-  if (ghost.dir.x !== 0) {
-    ghost.y += (tileCenterY - ghost.y) * 0.3;
-  }
-  if (ghost.dir.y !== 0) {
-    ghost.x += (tileCenterX - ghost.x) * 0.3;
-  }
-
-  ghost.x += ghost.dir.x * speed;
-  ghost.y += ghost.dir.y * speed;
   wrapPosition(ghost);
 
   if (ghost.mode === GHOST_MODE.EXITING) {
@@ -975,13 +1053,17 @@ function moveGhost(ghost, dt) {
   }
 
   if (ghost.mode === GHOST_MODE.EATEN) {
-    const homeX = ghostHouseCenter.x * tileSize;
-    const homeY = ghostHouseCenter.y * tileSize;
-    if (Math.hypot(homeX - ghost.x, homeY - ghost.y) < tileSize / 2) {
+    const homeX = ghostHouseCenter.x * tileSize + tileSize / 2;
+    const homeY = ghostHouseCenter.y * tileSize + tileSize / 2;
+    // Check if ghost has reached the ghost house area (more generous check)
+    if (ghost.y >= ghostHouseCenter.y * tileSize && Math.abs(ghost.x - homeX) < tileSize) {
       ghost.eaten = false;
       ghost.inHouse = true;
       ghost.mode = GHOST_MODE.EXITING;
       ghost.exitDelay = 0.5;
+      // Reset position to center
+      ghost.x = homeX;
+      ghost.y = homeY;
     }
   }
 }
@@ -1386,8 +1468,10 @@ window.addEventListener('keydown', (e) => {
   // Toggle pause with Escape key
   if (e.code === 'Escape' && gameState === GAME_STATE.PLAYING) {
     setState(GAME_STATE.PAUSED);
+    updatePauseButton();
   } else if (e.code === 'Escape' && gameState === GAME_STATE.PAUSED) {
     setState(GAME_STATE.PLAYING);
+    updatePauseButton();
   }
 });
 
@@ -1480,6 +1564,33 @@ document.getElementById('mute').addEventListener('click', () => {
     playSiren();
   }
 });
+
+// Pause button handler
+document.getElementById('pause').addEventListener('click', () => {
+  const pauseBtn = document.getElementById('pause');
+
+  if (gameState === GAME_STATE.PLAYING) {
+    setState(GAME_STATE.PAUSED);
+    pauseBtn.textContent = '▶';
+    pauseBtn.classList.add('is-paused');
+  } else if (gameState === GAME_STATE.PAUSED) {
+    setState(GAME_STATE.PLAYING);
+    pauseBtn.textContent = '⏸';
+    pauseBtn.classList.remove('is-paused');
+  }
+});
+
+// Update pause button when state changes via keyboard
+function updatePauseButton() {
+  const pauseBtn = document.getElementById('pause');
+  if (gameState === GAME_STATE.PAUSED) {
+    pauseBtn.textContent = '▶';
+    pauseBtn.classList.add('is-paused');
+  } else {
+    pauseBtn.textContent = '⏸';
+    pauseBtn.classList.remove('is-paused');
+  }
+}
 
 // Mode toggle button handler
 document.getElementById('mode').addEventListener('click', () => {
