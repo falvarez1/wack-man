@@ -940,7 +940,9 @@ function moveGhost(ghost, dt) {
                     ghost.lastDecisionTile.y !== currentTileY;
 
   // Only make direction decisions at tile centers (intersections) in NEW tiles
-  const atIntersection = distToCenter < 2 && isNewTile;
+  // Use a tolerance that scales with per-frame movement to avoid skipping intersections
+  const intersectionTolerance = Math.max(2, speed * 2);
+  const atIntersection = distToCenter <= intersectionTolerance && isNewTile;
 
   const isExitingOrEaten = ghost.mode === GHOST_MODE.EXITING || ghost.mode === GHOST_MODE.EATEN;
 
