@@ -13,8 +13,8 @@ let level = 1;
 let gameStarted = false;
 
 // Ghost house configuration
-const ghostHouseExit = { x: 13.5, y: 11 }; // Exit point above the gate
-const ghostHouseCenter = { x: 13.5, y: 14 }; // Center of ghost house
+const ghostHouseExit = { x: 13, y: 11 }; // Exit point above the gate
+const ghostHouseCenter = { x: 13, y: 14 }; // Center of ghost house
 
 const layout = [
   'WWWWWWWWWWWWWWWWWWWWWWWWWWWW',
@@ -76,8 +76,8 @@ const scatterTargets = [
 const playerStartRow = 22;
 
 const players = [
-  createPlayer(cols / 2 - 1.5, playerStartRow, '#f6d646', ['ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight']),
-  createPlayer(cols / 2 + 0.5, playerStartRow, '#6ef5c6', ['KeyW', 'KeyA', 'KeyS', 'KeyD'])
+  createPlayer(11, playerStartRow, '#f6d646', ['ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight']),
+  createPlayer(16, playerStartRow, '#6ef5c6', ['KeyW', 'KeyA', 'KeyS', 'KeyD'])
 ];
 
 // Ghost AI modes
@@ -90,9 +90,9 @@ const GHOST_MODE = {
 };
 
 const ghosts = [
-  createGhost(cols / 2 - 0.5, 13, '#ff4b8b', 0), // Blinky - chases directly
-  createGhost(cols / 2 - 1.5, 14, '#53a4ff', 1), // Inky - targets ahead of player
-  createGhost(cols / 2 + 0.5, 14, '#ff8c42', 2), // Clyde - random/shy behavior
+  createGhost(13, 14, '#ff4b8b', 0), // Blinky - chases directly
+  createGhost(12, 14, '#53a4ff', 1), // Inky - targets ahead of player
+  createGhost(15, 14, '#ff8c42', 2), // Clyde - random/shy behavior
 ];
 
 let frightenedTimer = 0;
@@ -628,13 +628,13 @@ function loseLife() {
 }
 
 function resetPositions() {
-  players[0] = { ...createPlayer(cols / 2 - 1.5, playerStartRow, '#f6d646', ['ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight']), score: players[0].score };
-  players[1] = { ...createPlayer(cols / 2 + 0.5, playerStartRow, '#6ef5c6', ['KeyW', 'KeyA', 'KeyS', 'KeyD']), score: players[1].score };
+  players[0] = { ...createPlayer(11, playerStartRow, '#f6d646', ['ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight']), score: players[0].score };
+  players[1] = { ...createPlayer(16, playerStartRow, '#6ef5c6', ['KeyW', 'KeyA', 'KeyS', 'KeyD']), score: players[1].score };
   ghosts.forEach((g, idx) => {
     const colors = ['#ff4b8b', '#53a4ff', '#ff8c42'];
-    const cols2 = [cols / 2 - 0.5, cols / 2 - 1.5, cols / 2 + 0.5];
-    const rows2 = [13, 14, 14];
-    const fresh = createGhost(cols2[idx], rows2[idx], colors[idx], idx);
+    const ghostCols = [13, 12, 15];
+    const ghostRows = [14, 14, 14];
+    const fresh = createGhost(ghostCols[idx], ghostRows[idx], colors[idx], idx);
     ghosts[idx] = fresh;
   });
   frightenedTimer = 0;
