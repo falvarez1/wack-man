@@ -7,13 +7,26 @@ const rows = 30;
 const cols = 28;
 const baseSpeed = 125;
 const ghostSpeed = 110;
+const playerRadius = tileSize / 2 - 3; // Visual radius of player
+const collisionPadding = 2; // Extra padding to prevent wall clipping
+
+// ==================== GAME STATE MACHINE ====================
+const GAME_STATE = {
+  IDLE: 'idle',           // Waiting for player to start
+  READY: 'ready',         // "READY!" countdown
+  PLAYING: 'playing',     // Active gameplay
+  PAUSED: 'paused',       // Game paused
+  DYING: 'dying',         // Death animation playing
+  GAMEOVER: 'gameover'    // Game over screen
+};
+
+let gameState = GAME_STATE.IDLE;
+let stateTimer = 0; // Timer for state transitions
 
 // ==================== GAME STATE ====================
 let lastTime = 0;
-let paused = true;
 let lives = 3;
 let level = 1;
-let gameStarted = false;
 let highScore = parseInt(localStorage.getItem('wackman-highscore')) || 0;
 let comboTimer = 0;
 let comboCount = 0;
@@ -21,9 +34,89 @@ let screenShake = 0;
 let screenFlash = 0;
 let totalPellets = 0;
 
+// State transition helper
+function setState(newState, timer = 0) {
+  gameState = newState;
+  stateTimer = timer;
+}
+
+function isPlaying() {
+  return gameState === GAME_STATE.PLAYING;
+}
+
+function isPaused() {
+  return gameState === GAME_STATE.PAUSED;
+}
+
+function isIdle() {
+  return gameState === GAME_STATE.IDLE;
+}
+
+function isGameOver() {
+  return gameState === GAME_STATE.GAMEOVER;
+}
+
+// Get the active players based on game mode
+function getActivePlayers() {
+  return singlePlayerMode ? [players[0]] : players;
+}
+
+// Check if a player index is active
+function isPlayerActive(index) {
+  return index === 0 || !singlePlayerMode;
+}
+
 // Ghost house configuration
 const ghostHouseExit = { x: 13, y: 11 };
 const ghostHouseCenter = { x: 13, y: 14 };
+
+// ==================== STATIC MAZE CACHE ====================
+// Pre-rendered canvas for static maze elements (walls)
+let mazeCache = null;
+let mazeCacheCtx = null;
+
+function initMazeCache() {
+  mazeCache = document.createElement('canvas');
+  mazeCache.width = canvas.width;
+  mazeCache.height = canvas.height;
+  mazeCacheCtx = mazeCache.getContext('2d');
+  renderMazeToCache();
+}
+
+function renderMazeToCache() {
+  if (!mazeCacheCtx) return;
+
+  // Clear the cache
+  mazeCacheCtx.clearRect(0, 0, mazeCache.width, mazeCache.height);
+
+  // Draw walls to cache (without animations)
+  layout.forEach((row, y) => {
+    [...row].forEach((cell, x) => {
+      const px = x * tileSize;
+      const py = y * tileSize;
+      if (cell === 'W') {
+        // Wall base
+        mazeCacheCtx.fillStyle = '#1a1a3d';
+        mazeCacheCtx.fillRect(px, py, tileSize, tileSize);
+
+        // Inner glow (static)
+        const gradient = mazeCacheCtx.createRadialGradient(
+          px + tileSize/2, py + tileSize/2, 0,
+          px + tileSize/2, py + tileSize/2, tileSize
+        );
+        gradient.addColorStop(0, 'rgba(30, 60, 120, 0.3)');
+        gradient.addColorStop(1, 'rgba(10, 10, 30, 0)');
+        mazeCacheCtx.fillStyle = gradient;
+        mazeCacheCtx.fillRect(px, py, tileSize, tileSize);
+
+        // Static border glow (use average alpha)
+        mazeCacheCtx.strokeStyle = 'rgba(14, 243, 255, 0.15)';
+        mazeCacheCtx.lineWidth = 1;
+        mazeCacheCtx.strokeRect(px + 3, py + 3, tileSize - 6, tileSize - 6);
+      }
+    });
+  });
+}
 
 // ==================== PARTICLE SYSTEM ====================
 const particles = [];
@@ -196,8 +289,8 @@ let scatterTimer = 0;
 let scatterMode = true;
 let ghostMultiplier = 1;
 let musicMuted = false;
-let readyTimer = 0;
 let sirenSpeed = 1;
+let singlePlayerMode = false; // false = 2P mode, true = 1P mode
 
 // ==================== AUDIO SYSTEM ====================
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -275,33 +368,18 @@ function drawGrid() {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
 
-  // Draw walls with glow effect
+  // Draw cached maze (walls) - much faster than redrawing every frame
+  if (mazeCache) {
+    ctx.drawImage(mazeCache, 0, 0);
+  }
+
+  // Draw animated elements that aren't cached
+  // Ghost house gate (animated)
   layout.forEach((row, y) => {
     [...row].forEach((cell, x) => {
-      const px = x * tileSize;
-      const py = y * tileSize;
-      if (cell === 'W') {
-        // Wall base
-        ctx.fillStyle = '#1a1a3d';
-        ctx.fillRect(px, py, tileSize, tileSize);
-
-        // Inner glow
-        const gradient = ctx.createRadialGradient(
-          px + tileSize/2, py + tileSize/2, 0,
-          px + tileSize/2, py + tileSize/2, tileSize
-        );
-        gradient.addColorStop(0, 'rgba(30, 60, 120, 0.3)');
-        gradient.addColorStop(1, 'rgba(10, 10, 30, 0)');
-        ctx.fillStyle = gradient;
-        ctx.fillRect(px, py, tileSize, tileSize);
-
-        // Border glow
-        ctx.strokeStyle = `rgba(14, 243, 255, ${0.15 + Math.sin(Date.now() / 1000) * 0.05})`;
-        ctx.lineWidth = 1;
-        ctx.strokeRect(px + 3, py + 3, tileSize - 6, tileSize - 6);
-      }
-      // Ghost house gate
       if (cell === '-') {
+        const px = x * tileSize;
+        const py = y * tileSize;
         const pulse = 0.7 + Math.sin(Date.now() / 300) * 0.3;
         ctx.fillStyle = `rgba(255, 156, 206, ${pulse})`;
         ctx.fillRect(px, py + tileSize / 2 - 2, tileSize, 4);
@@ -365,6 +443,9 @@ function drawGrid() {
 
 function drawPlayers() {
   players.forEach((p, idx) => {
+    // Skip P2 in single-player mode
+    if (!isPlayerActive(idx)) return;
+
     if (!p.alive) {
       // Death animation
       if (p.deathTimer > 0) {
@@ -517,13 +598,40 @@ function drawGhosts() {
 
 function drawUI() {
   // Ready screen
-  if (readyTimer > 0) {
+  if (gameState === GAME_STATE.READY) {
     ctx.fillStyle = '#f6d646';
     ctx.shadowColor = '#f6d646';
     ctx.shadowBlur = 20;
     ctx.font = '24px "Press Start 2P", monospace';
     ctx.textAlign = 'center';
     ctx.fillText('READY!', canvas.width / 2, canvas.height / 2);
+    ctx.shadowBlur = 0;
+  }
+
+  // Idle screen - show instructions
+  if (gameState === GAME_STATE.IDLE) {
+    ctx.fillStyle = '#6ef5c6';
+    ctx.shadowColor = '#6ef5c6';
+    ctx.shadowBlur = 15;
+    ctx.font = '14px "Press Start 2P", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('PRESS START', canvas.width / 2, canvas.height / 2);
+    ctx.shadowBlur = 0;
+    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.fillStyle = '#aaa';
+    ctx.fillText('or press any movement key', canvas.width / 2, canvas.height / 2 + 25);
+  }
+
+  // Paused indicator
+  if (gameState === GAME_STATE.PAUSED) {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#f6d646';
+    ctx.shadowColor = '#f6d646';
+    ctx.shadowBlur = 20;
+    ctx.font = '24px "Press Start 2P", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('PAUSED', canvas.width / 2, canvas.height / 2);
     ctx.shadowBlur = 0;
   }
 
@@ -591,6 +699,62 @@ function isWall(nx, ny) {
   return !isPassable(nx, ny, false, false);
 }
 
+// Check if a circle at (x, y) with given radius would collide with any wall
+function wouldCollideWithWall(x, y, radius) {
+  // Check the four corners of the bounding box plus cardinal points
+  const checkPoints = [
+    { x: x - radius, y: y },           // Left
+    { x: x + radius, y: y },           // Right
+    { x: x, y: y - radius },           // Top
+    { x: x, y: y + radius },           // Bottom
+    { x: x - radius * 0.7, y: y - radius * 0.7 }, // Top-left
+    { x: x + radius * 0.7, y: y - radius * 0.7 }, // Top-right
+    { x: x - radius * 0.7, y: y + radius * 0.7 }, // Bottom-left
+    { x: x + radius * 0.7, y: y + radius * 0.7 }, // Bottom-right
+  ];
+
+  for (const point of checkPoints) {
+    const tileX = Math.floor(point.x / tileSize);
+    const tileY = Math.floor(point.y / tileSize);
+    if (isWall(tileX, tileY)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Calculate the maximum distance player can move before hitting a wall
+function getMaxMoveDistance(x, y, dirX, dirY, speed, radius) {
+  // If not moving, no distance
+  if (dirX === 0 && dirY === 0) return 0;
+
+  // Binary search for the maximum safe distance
+  let lo = 0;
+  let hi = speed;
+  const epsilon = 0.5;
+
+  // First check if full movement is safe
+  const fullX = x + dirX * speed;
+  const fullY = y + dirY * speed;
+  if (!wouldCollideWithWall(fullX, fullY, radius)) {
+    return speed;
+  }
+
+  // Binary search for max safe distance
+  while (hi - lo > epsilon) {
+    const mid = (lo + hi) / 2;
+    const testX = x + dirX * mid;
+    const testY = y + dirY * mid;
+    if (wouldCollideWithWall(testX, testY, radius)) {
+      hi = mid;
+    } else {
+      lo = mid;
+    }
+  }
+
+  return lo;
+}
+
 function wrapPosition(entity) {
   if (entity.x < 0) entity.x = canvas.width + entity.x;
   if (entity.x > canvas.width) entity.x = entity.x - canvas.width;
@@ -610,6 +774,7 @@ function movePlayer(player, dt) {
 
   tryTurn(player);
   const speed = baseSpeed + (level - 1) * 5;
+  const effectiveRadius = playerRadius + collisionPadding;
 
   // Calculate tile center for snapping
   const tileCenterX = Math.floor(player.x / tileSize) * tileSize + tileSize / 2;
@@ -620,37 +785,48 @@ function movePlayer(player, dt) {
   if (player.dir.x !== 0) {
     // Moving horizontally - snap Y to center
     const snapSpeed = 0.3;
-    player.y += (tileCenterY - player.y) * snapSpeed;
+    const targetY = tileCenterY;
+    const newY = player.y + (targetY - player.y) * snapSpeed;
+    // Only snap if it won't cause a wall collision
+    if (!wouldCollideWithWall(player.x, newY, effectiveRadius)) {
+      player.y = newY;
+    }
   }
   if (player.dir.y !== 0) {
     // Moving vertically - snap X to center
     const snapSpeed = 0.3;
-    player.x += (tileCenterX - player.x) * snapSpeed;
+    const targetX = tileCenterX;
+    const newX = player.x + (targetX - player.x) * snapSpeed;
+    // Only snap if it won't cause a wall collision
+    if (!wouldCollideWithWall(newX, player.y, effectiveRadius)) {
+      player.x = newX;
+    }
   }
 
-  const nextX = player.x + player.dir.x * speed * dt;
-  const nextY = player.y + player.dir.y * speed * dt;
-  const tileX = Math.floor(nextX / tileSize);
-  const tileY = Math.floor(nextY / tileSize);
+  // Calculate movement with proper collision detection
+  const moveDistance = speed * dt;
+  const maxDistance = getMaxMoveDistance(
+    player.x, player.y,
+    player.dir.x, player.dir.y,
+    moveDistance, effectiveRadius
+  );
 
-  if (!isWall(tileX, tileY)) {
+  if (maxDistance > 0.1) {
     // Update trail
     if (player.dir.x !== 0 || player.dir.y !== 0) {
       player.trail.push({ x: player.x, y: player.y });
       if (player.trail.length > 8) player.trail.shift();
     }
-    player.x = nextX;
-    player.y = nextY;
-  } else {
-    // Hit a wall - snap to tile center to prevent getting stuck
-    if (player.dir.x !== 0) {
-      player.x = tileCenterX;
-    }
-    if (player.dir.y !== 0) {
-      player.y = tileCenterY;
-    }
+    player.x += player.dir.x * maxDistance;
+    player.y += player.dir.y * maxDistance;
+  }
+
+  // If we couldn't move the full distance, we hit a wall
+  if (maxDistance < moveDistance * 0.9 && (player.dir.x !== 0 || player.dir.y !== 0)) {
+    // Stop movement in this direction
     player.dir = { x: 0, y: 0 };
   }
+
   wrapPosition(player);
   eatPellet(player);
   eatFruit(player);
@@ -739,7 +915,7 @@ function moveGhost(ghost, dt) {
       break;
     case GHOST_MODE.CHASE:
     default:
-      target = getGhostTarget(ghost, players);
+      target = getGhostTarget(ghost, getActivePlayers());
       break;
   }
 
@@ -859,9 +1035,17 @@ function addScore(player, points) {
   const totalScore = players[0].score + players[1].score;
   const prevScore = totalScore - points;
 
-  // Extra life at 10000 and every 50000 after
-  if (Math.floor(prevScore / 10000) < Math.floor(totalScore / 10000)) {
-    lives += 1;
+  // Extra life at 10000 first, then every 50000 after (10k, 60k, 110k, 160k...)
+  const getExtraLivesForScore = (score) => {
+    if (score < 10000) return 0;
+    return 1 + Math.floor((score - 10000) / 50000);
+  };
+
+  const prevLives = getExtraLivesForScore(prevScore);
+  const newLives = getExtraLivesForScore(totalScore);
+
+  if (newLives > prevLives) {
+    lives += (newLives - prevLives);
     playSound(880, 0.3, 0.2);
     playSound(1100, 0.2, 0.2);
     playSound(1320, 0.2, 0.2);
@@ -901,8 +1085,6 @@ function nextLevel() {
   fruitTimers.length = 0;
   particles.length = 0;
   scorePopups.length = 0;
-  readyTimer = 2.5;
-  paused = true;
   screenFlash = 1;
 
   playSound(440, 0.2, 0.15);
@@ -910,11 +1092,8 @@ function nextLevel() {
   playSound(660, 0.2, 0.15);
   playSound(880, 0.3, 0.2);
 
-  setTimeout(() => {
-    paused = false;
-    readyTimer = 0;
-    spawnFruit();
-  }, 2500);
+  // Transition to READY state with 2.5 second timer
+  setState(GAME_STATE.READY, 2.5);
 }
 
 function update(dt) {
@@ -931,16 +1110,43 @@ function update(dt) {
   updateParticles(dt);
 
   // Update death animations
-  players.forEach(p => {
+  getActivePlayers().forEach(p => {
     if (!p.alive && p.deathTimer > 0) {
       p.deathTimer -= dt;
     }
   });
 
-  if (paused) return;
-  if (readyTimer > 0) {
-    readyTimer -= dt;
-    return;
+  // Handle state machine
+  switch (gameState) {
+    case GAME_STATE.IDLE:
+    case GAME_STATE.PAUSED:
+    case GAME_STATE.GAMEOVER:
+      return;
+
+    case GAME_STATE.READY:
+      stateTimer -= dt;
+      if (stateTimer <= 0) {
+        setState(GAME_STATE.PLAYING);
+        spawnFruit();
+      }
+      return;
+
+    case GAME_STATE.DYING:
+      stateTimer -= dt;
+      if (stateTimer <= 0) {
+        if (lives <= 0) {
+          setState(GAME_STATE.GAMEOVER);
+          showGameOver();
+        } else {
+          resetPositions();
+          setState(GAME_STATE.READY, 1.5);
+        }
+      }
+      return;
+
+    case GAME_STATE.PLAYING:
+      // Continue with normal gameplay below
+      break;
   }
 
   frightenedTimer = Math.max(0, frightenedTimer - dt);
@@ -956,7 +1162,7 @@ function update(dt) {
   const cyclePos = scatterTimer % cycleDuration;
   scatterMode = cyclePos < scatterDuration;
 
-  players.forEach((p) => p.alive && movePlayer(p, dt));
+  getActivePlayers().forEach((p) => p.alive && movePlayer(p, dt));
   ghosts.forEach((g) => moveGhost(g, dt));
   checkCollisions();
 
@@ -973,8 +1179,9 @@ function update(dt) {
 }
 
 function checkCollisions() {
+  const activePlayers = getActivePlayers();
   ghosts.forEach((g) => {
-    players.forEach((p) => {
+    activePlayers.forEach((p) => {
       if (!p.alive || g.eaten || g.inHouse || p.invincible > 0) return;
       if (collide(g, p)) {
         if (frightenedTimer > 0) {
@@ -1009,24 +1216,21 @@ function loseLife(deadPlayer) {
   playSound(150, 0.3, 0.25);
   playSound(100, 0.4, 0.2);
 
-  if (lives <= 0) {
-    setTimeout(() => {
-      paused = true;
-      showGameOver();
-    }, 1500);
-    return;
-  }
-
-  setTimeout(() => {
-    resetPositions();
-    readyTimer = 1.5;
-  }, 1500);
+  // Transition to DYING state - the state machine will handle
+  // transitioning to GAMEOVER or READY after the timer expires
+  setState(GAME_STATE.DYING, 1.5);
 }
 
 function resetPositions() {
-  players[0] = { ...createPlayer(11, playerStartRow, '#f6d646', ['ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight']), score: players[0].score };
-  players[1] = { ...createPlayer(16, playerStartRow, '#6ef5c6', ['KeyW', 'KeyA', 'KeyS', 'KeyD']), score: players[1].score };
-  players.forEach(p => p.invincible = 2); // Brief invincibility after respawn
+  // In single-player mode, P1 starts in the center; in 2P mode, players are offset
+  const p1Col = singlePlayerMode ? 13 : 11;
+  const p2Col = 16;
+
+  players[0] = { ...createPlayer(p1Col, playerStartRow, '#f6d646', ['ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight']), score: players[0].score };
+  players[1] = { ...createPlayer(p2Col, playerStartRow, '#6ef5c6', ['KeyW', 'KeyA', 'KeyS', 'KeyD']), score: players[1].score };
+
+  // Only set invincibility for active players
+  getActivePlayers().forEach(p => p.invincible = 2);
 
   ghosts.forEach((g, idx) => {
     const colors = ['#ff4b8b', '#53a4ff', '#ff8c42', '#b967ff'];
@@ -1132,7 +1336,7 @@ function playMusic() {
   let idx = 0;
   clearInterval(musicInterval);
   musicInterval = setInterval(() => {
-    if (musicMuted || paused) return;
+    if (musicMuted || gameState !== GAME_STATE.PLAYING) return;
     playSound(melody[idx % melody.length], 0.15, 0.04);
     idx += 1;
   }, 250);
@@ -1142,7 +1346,7 @@ function playSiren() {
   if (musicMuted) return;
   clearInterval(sirenInterval);
   sirenInterval = setInterval(() => {
-    if (musicMuted || paused || frightenedTimer > 0) return;
+    if (musicMuted || gameState !== GAME_STATE.PLAYING || frightenedTimer > 0) return;
     const freq = 100 + Math.sin(Date.now() / (500 / sirenSpeed)) * 50;
     playSound(freq, 0.1, 0.02);
   }, 150);
@@ -1153,16 +1357,22 @@ window.addEventListener('keydown', (e) => {
   const dir = directions[e.code];
   if (!dir) return;
 
-  players.forEach((p) => {
-    if (p.keys.includes(e.code)) {
+  players.forEach((p, idx) => {
+    // In single-player mode, both arrow keys and WASD control P1
+    const isP1Key = players[0].keys.includes(e.code);
+    const isP2Key = players[1].keys.includes(e.code);
+    const shouldControl = p.keys.includes(e.code) ||
+      (singlePlayerMode && idx === 0 && isP2Key);
+
+    if (shouldControl && isPlayerActive(idx)) {
       e.preventDefault();
       p.queued = { ...dir };
-      if (paused && gameStarted && lives > 0) {
-        paused = false;
-        if (readyTimer <= 0) readyTimer = 0;
-      }
-      if (!gameStarted) {
+
+      // Handle state transitions based on input
+      if (gameState === GAME_STATE.IDLE) {
         startGame();
+      } else if (gameState === GAME_STATE.PAUSED && lives > 0) {
+        setState(GAME_STATE.PLAYING);
       }
     }
   });
@@ -1171,6 +1381,13 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('keydown', (e) => {
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
     e.preventDefault();
+  }
+
+  // Toggle pause with Escape key
+  if (e.code === 'Escape' && gameState === GAME_STATE.PLAYING) {
+    setState(GAME_STATE.PAUSED);
+  } else if (e.code === 'Escape' && gameState === GAME_STATE.PAUSED) {
+    setState(GAME_STATE.PLAYING);
   }
 });
 
@@ -1183,10 +1400,10 @@ canvas.addEventListener('touchstart', (e) => {
   touchStartY = e.touches[0].clientY;
   e.preventDefault();
 
-  if (!gameStarted) {
+  if (gameState === GAME_STATE.IDLE) {
     startGame();
-  } else if (paused && lives > 0) {
-    paused = false;
+  } else if (gameState === GAME_STATE.PAUSED && lives > 0) {
+    setState(GAME_STATE.PLAYING);
   }
 }, { passive: false });
 
@@ -1216,12 +1433,9 @@ canvas.addEventListener('touchend', (e) => {
 
 // ==================== GAME INITIALIZATION ====================
 function startGame() {
-  gameStarted = true;
-  readyTimer = 2.5;
-  setTimeout(() => {
-    paused = false;
-    readyTimer = 0;
-  }, 2500);
+  // Start game with READY state and 2.5 second countdown
+  setState(GAME_STATE.READY, 2.5);
+
   if (audioCtx.state === 'suspended') audioCtx.resume();
   if (!musicMuted) {
     playMusic();
@@ -1229,22 +1443,29 @@ function startGame() {
   }
 }
 
+function resetGame() {
+  lives = 3;
+  level = 1;
+  players[0].score = 0;
+  players[1].score = 0;
+  scatterTimer = 0;
+  comboCount = 0;
+  frightenedTimer = 0;
+  ghostMultiplier = 1;
+  resetBoard();
+  resetPositions();
+  updateHud();
+  setState(GAME_STATE.IDLE);
+}
+
 document.getElementById('start').addEventListener('click', () => {
-  if (lives <= 0) {
-    lives = 3;
-    level = 1;
-    players[0].score = 0;
-    players[1].score = 0;
-    scatterTimer = 0;
-    comboCount = 0;
-    resetBoard();
-    resetPositions();
-    updateHud();
-  }
-  if (!gameStarted) {
+  if (gameState === GAME_STATE.GAMEOVER || lives <= 0) {
+    resetGame();
     startGame();
-  } else {
-    paused = false;
+  } else if (gameState === GAME_STATE.IDLE) {
+    startGame();
+  } else if (gameState === GAME_STATE.PAUSED) {
+    setState(GAME_STATE.PLAYING);
   }
 });
 
@@ -1260,7 +1481,44 @@ document.getElementById('mute').addEventListener('click', () => {
   }
 });
 
+// Mode toggle button handler
+document.getElementById('mode').addEventListener('click', () => {
+  // Only allow mode change when not actively playing
+  if (gameState !== GAME_STATE.IDLE && gameState !== GAME_STATE.GAMEOVER) {
+    return;
+  }
+
+  singlePlayerMode = !singlePlayerMode;
+  const modeBtn = document.getElementById('mode');
+  modeBtn.textContent = singlePlayerMode ? '1P' : '2P';
+  modeBtn.classList.toggle('single-player', singlePlayerMode);
+
+  // Update P2 visibility in HUD
+  updateModeDisplay();
+
+  // Reset positions for the new mode
+  if (gameState === GAME_STATE.IDLE) {
+    resetPositions();
+  }
+});
+
+function updateModeDisplay() {
+  // Hide/show P2 controls info
+  const p2ControlGroup = document.querySelector('.control-group:nth-child(2)');
+  if (p2ControlGroup) {
+    p2ControlGroup.style.display = singlePlayerMode ? 'none' : 'flex';
+  }
+
+  // Hide/show P2 score box
+  const p2StatBox = document.querySelector('.stat-box:nth-child(2)');
+  if (p2StatBox) {
+    p2StatBox.style.display = singlePlayerMode ? 'none' : 'flex';
+  }
+}
+
 // Initialize
+initMazeCache();
 resetBoard();
 updateHud();
+updateModeDisplay();
 requestAnimationFrame(loop);
