@@ -763,30 +763,16 @@ function wrapPosition(entity) {
 function tryTurn(player) {
   if (player.queued.x === 0 && player.queued.y === 0) return;
 
-  // Calculate the tile center position
-  const tileCenterX = Math.floor(player.x / tileSize) * tileSize + tileSize / 2;
-  const tileCenterY = Math.floor(player.y / tileSize) * tileSize + tileSize / 2;
-
-  // Check if we're close enough to tile center to turn
-  const distToCenter = Math.hypot(player.x - tileCenterX, player.y - tileCenterY);
-  if (distToCenter > tileSize / 3) {
-    // Not at an intersection yet, keep current direction
-    return;
-  }
-
-  // Check if the turn direction is valid (not a wall)
+  // Check if the queued direction is valid from current tile
   const currentTileX = Math.floor(player.x / tileSize);
   const currentTileY = Math.floor(player.y / tileSize);
   const nextTileX = currentTileX + player.queued.x;
   const nextTileY = currentTileY + player.queued.y;
 
   if (!isWall(nextTileX, nextTileY)) {
-    // Valid turn - snap to center and change direction
-    player.x = tileCenterX;
-    player.y = tileCenterY;
+    // Valid turn - change direction
     player.dir = { ...player.queued };
   }
-  // Note: Don't clear queued direction - allow the player to buffer turns
 }
 
 function movePlayer(player, dt) {
@@ -800,53 +786,44 @@ function movePlayer(player, dt) {
   const tileCenterY = Math.floor(player.y / tileSize) * tileSize + tileSize / 2;
 
   // Always snap to center of lane perpendicular to movement direction
-  // This prevents drifting within corridors and the "wall stopping" bug
-  // Use aggressive snapping to keep player centered
-  const snapSpeed = 0.4;
+  // This prevents drifting and the "wall stopping" bug
+  const snapSpeed = 0.5;
 
   if (player.dir.x !== 0) {
-    // Moving horizontally - force snap Y to center
-    const diffY = tileCenterY - player.y;
-    if (Math.abs(diffY) > 0.5) {
-      player.y += diffY * snapSpeed;
-    } else {
-      player.y = tileCenterY; // Snap exactly when close enough
-    }
+    // Moving horizontally - snap Y to center
+    player.y += (tileCenterY - player.y) * snapSpeed;
   }
   if (player.dir.y !== 0) {
-    // Moving vertically - force snap X to center
-    const diffX = tileCenterX - player.x;
-    if (Math.abs(diffX) > 0.5) {
-      player.x += diffX * snapSpeed;
-    } else {
-      player.x = tileCenterX; // Snap exactly when close enough
-    }
+    // Moving vertically - snap X to center
+    player.x += (tileCenterX - player.x) * snapSpeed;
   }
 
-  // For forward collision, use a slightly smaller radius to avoid edge cases
-  const forwardRadius = playerRadius;
+  // Calculate next position
+  const nextX = player.x + player.dir.x * speed * dt;
+  const nextY = player.y + player.dir.y * speed * dt;
 
-  // Calculate movement with proper collision detection
-  const moveDistance = speed * dt;
-  const maxDistance = getMaxMoveDistance(
-    player.x, player.y,
-    player.dir.x, player.dir.y,
-    moveDistance, forwardRadius
-  );
+  // Check collision at the next tile (not using radius-based collision for movement)
+  const nextTileX = Math.floor(nextX / tileSize);
+  const nextTileY = Math.floor(nextY / tileSize);
 
-  if (maxDistance > 0.1) {
+  if (!isWall(nextTileX, nextTileY)) {
     // Update trail
     if (player.dir.x !== 0 || player.dir.y !== 0) {
       player.trail.push({ x: player.x, y: player.y });
       if (player.trail.length > 8) player.trail.shift();
     }
-    player.x += player.dir.x * maxDistance;
-    player.y += player.dir.y * maxDistance;
-  }
-
-  // Only stop if we truly hit a wall (not just edge collision)
-  if (maxDistance < moveDistance * 0.5 && (player.dir.x !== 0 || player.dir.y !== 0)) {
-    // Stop movement in this direction
+    player.x = nextX;
+    player.y = nextY;
+  } else {
+    // Hit a wall - snap to tile center to prevent getting stuck
+    if (player.dir.x !== 0) {
+      // Moving horizontally, hit wall - snap X to center of current tile
+      player.x = tileCenterX;
+    }
+    if (player.dir.y !== 0) {
+      // Moving vertically, hit wall - snap Y to center of current tile
+      player.y = tileCenterY;
+    }
     player.dir = { x: 0, y: 0 };
   }
 
