@@ -293,6 +293,26 @@ button:active {
   font-size: 16px;
 }
 
+.btn-pause {
+  padding: 14px 18px;
+  font-size: 16px;
+  background: linear-gradient(135deg, #2d2d5a, #1a1a3d);
+  border-color: rgba(255, 75, 139, 0.3);
+  color: var(--ghost-1);
+}
+
+.btn-pause:hover {
+  border-color: var(--ghost-1);
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.4),
+    0 0 30px rgba(255, 75, 139, 0.3);
+}
+
+.btn-pause.is-paused {
+  background: linear-gradient(135deg, #3d2d4a, #2a1a3d);
+  border-color: rgba(255, 75, 139, 0.5);
+}
+
 .btn-mode {
   padding: 14px 18px;
   font-size: 12px;
