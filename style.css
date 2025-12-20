@@ -293,6 +293,34 @@ button:active {
   font-size: 16px;
 }
 
+.btn-mode {
+  padding: 14px 18px;
+  font-size: 12px;
+  background: linear-gradient(135deg, #2d2d5a, #1a1a3d);
+  border-color: rgba(110, 245, 198, 0.3);
+  color: var(--accent-2);
+  min-width: 60px;
+}
+
+.btn-mode:hover {
+  border-color: var(--accent-2);
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.4),
+    0 0 30px rgba(110, 245, 198, 0.3);
+}
+
+.btn-mode.single-player {
+  border-color: rgba(246, 214, 70, 0.3);
+  color: var(--accent);
+}
+
+.btn-mode.single-player:hover {
+  border-color: var(--accent);
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.4),
+    0 0 30px rgba(246, 214, 70, 0.3);
+}
+
 .canvas-wrap {
   margin-top: 20px;
   background:
