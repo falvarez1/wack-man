@@ -933,7 +933,7 @@ function moveGhost(ghost, dt) {
   const distToCenter = Math.hypot(ghost.x - tileCenterX, ghost.y - tileCenterY);
 
   // Only make direction decisions at tile centers (intersections)
-  const intersectionThreshold = Math.max(0.5, speed * 0.5);
+  const intersectionThreshold = Math.max(tileSize * 0.1, speed);
   const atIntersection = distToCenter < intersectionThreshold;
 
   const isExitingOrEaten = ghost.mode === GHOST_MODE.EXITING || ghost.mode === GHOST_MODE.EATEN;
