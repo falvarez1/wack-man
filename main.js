@@ -329,6 +329,7 @@ function createGhost(col, row, color, personality) {
     personality,
     mode: GHOST_MODE.EXITING,
     wobble: Math.random() * Math.PI * 2,
+    lastDecisionTile: { x: -1, y: -1 }, // Track last tile where decision was made
   };
 }
 
@@ -927,14 +928,21 @@ function moveGhost(ghost, dt) {
       break;
   }
 
-  // Calculate tile center
-  const tileCenterX = Math.floor(ghost.x / tileSize) * tileSize + tileSize / 2;
-  const tileCenterY = Math.floor(ghost.y / tileSize) * tileSize + tileSize / 2;
+  // Calculate current tile
+  const currentTileX = Math.floor(ghost.x / tileSize);
+  const currentTileY = Math.floor(ghost.y / tileSize);
+  const tileCenterX = currentTileX * tileSize + tileSize / 2;
+  const tileCenterY = currentTileY * tileSize + tileSize / 2;
   const distToCenter = Math.hypot(ghost.x - tileCenterX, ghost.y - tileCenterY);
 
-  // Only make direction decisions at tile centers (intersections)
-  const intersectionThreshold = Math.max(tileSize * 0.1, speed);
-  const atIntersection = distToCenter < intersectionThreshold;
+  // Check if this is a new tile (haven't made a decision here yet)
+  const isNewTile = ghost.lastDecisionTile.x !== currentTileX ||
+                    ghost.lastDecisionTile.y !== currentTileY;
+
+  // Only make direction decisions at tile centers (intersections) in NEW tiles
+  // Use a tolerance that scales with per-frame movement to avoid skipping intersections
+  const intersectionTolerance = Math.max(2, speed * 2);
+  const atIntersection = distToCenter <= intersectionTolerance && isNewTile;
 
   const isExitingOrEaten = ghost.mode === GHOST_MODE.EXITING || ghost.mode === GHOST_MODE.EATEN;
 
@@ -942,6 +950,9 @@ function moveGhost(ghost, dt) {
   const canReverse = ghost.eaten || ghost.inHouse;
 
   if (atIntersection) {
+    // Mark this tile as processed
+    ghost.lastDecisionTile = { x: currentTileX, y: currentTileY };
+
     // Snap to center before making decision
     ghost.x = tileCenterX;
     ghost.y = tileCenterY;
@@ -958,9 +969,6 @@ function moveGhost(ghost, dt) {
       }
       return true;
     });
-
-    const currentTileX = Math.floor(ghost.x / tileSize);
-    const currentTileY = Math.floor(ghost.y / tileSize);
 
     const validOptions = options.filter((d) => {
       const nextTileX = currentTileX + d.x;
@@ -1027,6 +1035,7 @@ function moveGhost(ghost, dt) {
     if (ghost.y <= exitY) {
       ghost.inHouse = false;
       ghost.mode = scatterMode ? GHOST_MODE.SCATTER : GHOST_MODE.CHASE;
+      ghost.lastDecisionTile = { x: -1, y: -1 }; // Reset for fresh decisions
     }
   }
 
@@ -1039,9 +1048,10 @@ function moveGhost(ghost, dt) {
       ghost.inHouse = true;
       ghost.mode = GHOST_MODE.EXITING;
       ghost.exitDelay = 0.5;
-      // Reset position to center
+      // Reset position and decision tracking
       ghost.x = homeX;
       ghost.y = homeY;
+      ghost.lastDecisionTile = { x: -1, y: -1 };
     }
   }
 }
