@@ -1,21 +1,105 @@
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 
+// ==================== CONFIGURATION ====================
 const tileSize = 24;
 const rows = 30;
 const cols = 28;
-const baseSpeed = 120; // px per second
-const ghostSpeed = 105;
+const baseSpeed = 125;
+const ghostSpeed = 110;
+
+// ==================== GAME STATE ====================
 let lastTime = 0;
 let paused = true;
 let lives = 3;
 let level = 1;
 let gameStarted = false;
+let highScore = parseInt(localStorage.getItem('wackman-highscore')) || 0;
+let comboTimer = 0;
+let comboCount = 0;
+let screenShake = 0;
+let screenFlash = 0;
+let totalPellets = 0;
 
 // Ghost house configuration
-const ghostHouseExit = { x: 13, y: 11 }; // Exit point above the gate
-const ghostHouseCenter = { x: 13, y: 14 }; // Center of ghost house
+const ghostHouseExit = { x: 13, y: 11 };
+const ghostHouseCenter = { x: 13, y: 14 };
 
+// ==================== PARTICLE SYSTEM ====================
+const particles = [];
+const scorePopups = [];
+
+function createParticle(x, y, color, type = 'pellet') {
+  const count = type === 'death' ? 20 : type === 'ghost' ? 15 : 5;
+  const speed = type === 'death' ? 4 : type === 'ghost' ? 3 : 2;
+  const life = type === 'death' ? 1.5 : type === 'ghost' ? 1 : 0.5;
+
+  for (let i = 0; i < count; i++) {
+    const angle = (Math.PI * 2 * i) / count + Math.random() * 0.5;
+    particles.push({
+      x, y,
+      vx: Math.cos(angle) * speed * (0.5 + Math.random()),
+      vy: Math.sin(angle) * speed * (0.5 + Math.random()),
+      life,
+      maxLife: life,
+      color,
+      size: type === 'death' ? 4 : type === 'ghost' ? 3 : 2,
+      type
+    });
+  }
+}
+
+function createScorePopup(x, y, score, color = '#fff') {
+  scorePopups.push({
+    x, y,
+    score,
+    life: 1.2,
+    color,
+    vy: -2
+  });
+}
+
+function updateParticles(dt) {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vy += 0.15; // gravity
+    p.life -= dt;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+
+  for (let i = scorePopups.length - 1; i >= 0; i--) {
+    const p = scorePopups[i];
+    p.y += p.vy;
+    p.life -= dt;
+    if (p.life <= 0) scorePopups.splice(i, 1);
+  }
+}
+
+function drawParticles() {
+  particles.forEach(p => {
+    const alpha = p.life / p.maxLife;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size * alpha, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+
+  scorePopups.forEach(p => {
+    const alpha = Math.min(1, p.life * 2);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = p.color;
+    ctx.font = 'bold 14px "Press Start 2P", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(`+${p.score}`, p.x, p.y);
+  });
+  ctx.globalAlpha = 1;
+}
+
+// ==================== LAYOUT ====================
 const layout = [
   'WWWWWWWWWWWWWWWWWWWWWWWWWWWW',
   'W............WW............W',
@@ -49,6 +133,7 @@ const layout = [
   'WWWWWWWWWWWWWWWWWWWWWWWWWWWW'
 ];
 
+// ==================== INPUT MAPPING ====================
 const directions = {
   ArrowUp: { x: 0, y: -1 },
   ArrowDown: { x: 0, y: 1 },
@@ -60,19 +145,28 @@ const directions = {
   KeyD: { x: 1, y: 0 },
 };
 
+// ==================== GAME OBJECTS ====================
 const pellets = new Set();
 const powerPellets = new Set();
 const fruitTimers = [];
 
-// Ghost scatter corners (each ghost has a preferred corner)
+// Ghost scatter corners
 const scatterTargets = [
-  { x: cols - 3, y: 1 },   // Pink - top right
-  { x: 2, y: 1 },          // Blue - top left
-  { x: cols - 3, y: rows - 2 }, // Orange - bottom right
-  { x: 2, y: rows - 2 },   // Fourth ghost if added - bottom left
+  { x: cols - 3, y: 1 },
+  { x: 2, y: 1 },
+  { x: cols - 3, y: rows - 2 },
+  { x: 2, y: rows - 2 },
 ];
 
-// Player starting positions - row 22 has open space
+// Fruit types with different values and colors
+const fruitTypes = [
+  { color: '#ff5dd9', points: 100, name: 'cherry' },
+  { color: '#ff9933', points: 300, name: 'orange' },
+  { color: '#00ff88', points: 500, name: 'melon' },
+  { color: '#ffff00', points: 700, name: 'galaxian' },
+  { color: '#00ffff', points: 1000, name: 'bell' },
+];
+
 const playerStartRow = 22;
 
 const players = [
@@ -89,23 +183,28 @@ const GHOST_MODE = {
   EXITING: 'exiting'
 };
 
+// Four ghosts with unique personalities
 const ghosts = [
-  createGhost(13, 14, '#ff4b8b', 0), // Blinky - chases directly
-  createGhost(12, 14, '#53a4ff', 1), // Inky - targets ahead of player
-  createGhost(15, 14, '#ff8c42', 2), // Clyde - random/shy behavior
+  createGhost(13, 14, '#ff4b8b', 0), // Blinky - direct chaser (red/pink)
+  createGhost(12, 14, '#53a4ff', 1), // Inky - ambusher (blue)
+  createGhost(14, 14, '#ff8c42', 2), // Clyde - random/shy (orange)
+  createGhost(13, 13, '#b967ff', 3), // Pinky - targets ahead (purple)
 ];
 
 let frightenedTimer = 0;
 let scatterTimer = 0;
-let scatterMode = true; // Start in scatter mode
-let ghostMultiplier = 1; // For consecutive ghost eating
+let scatterMode = true;
+let ghostMultiplier = 1;
 let musicMuted = false;
-let readyTimer = 0; // Ready screen timer
+let readyTimer = 0;
+let sirenSpeed = 1;
 
-// Audio setup
+// ==================== AUDIO SYSTEM ====================
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 let musicInterval;
+let sirenInterval;
 
+// ==================== ENTITY CREATION ====================
 function createPlayer(col, row, color, keys) {
   return {
     x: col * tileSize + tileSize / 2,
@@ -116,7 +215,9 @@ function createPlayer(col, row, color, keys) {
     keys,
     score: 0,
     alive: true,
-    mouth: 0,
+    deathTimer: 0,
+    invincible: 0,
+    trail: [],
   };
 }
 
@@ -126,92 +227,205 @@ function createGhost(col, row, color, personality) {
     y: row * tileSize + tileSize / 2,
     startX: col * tileSize + tileSize / 2,
     startY: row * tileSize + tileSize / 2,
-    dir: { x: 0, y: -1 }, // Start moving up
+    dir: { x: 0, y: -1 },
     color,
     home: { x: col, y: row },
     eaten: false,
-    inHouse: true, // Track if ghost is in the house
-    exitDelay: personality * 2, // Stagger ghost exits
-    personality, // 0=Blinky, 1=Inky, 2=Clyde
+    inHouse: true,
+    exitDelay: personality * 1.5,
+    personality,
     mode: GHOST_MODE.EXITING,
+    wobble: Math.random() * Math.PI * 2,
   };
 }
 
+// ==================== BOARD MANAGEMENT ====================
 function resetBoard() {
   pellets.clear();
   powerPellets.clear();
   fruitTimers.length = 0;
+  totalPellets = 0;
 
   layout.forEach((row, y) => {
     [...row].forEach((cell, x) => {
-      if (cell === '.') pellets.add(`${x},${y}`);
+      if (cell === '.') {
+        pellets.add(`${x},${y}`);
+        totalPellets++;
+      }
       if (cell === 'o') powerPellets.add(`${x},${y}`);
     });
   });
 }
 
+// ==================== RENDERING ====================
 function drawGrid() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  // Apply screen shake
+  ctx.save();
+  if (screenShake > 0) {
+    const shakeX = (Math.random() - 0.5) * screenShake * 10;
+    const shakeY = (Math.random() - 0.5) * screenShake * 10;
+    ctx.translate(shakeX, shakeY);
+  }
 
+  ctx.clearRect(-10, -10, canvas.width + 20, canvas.height + 20);
+
+  // Screen flash effect
+  if (screenFlash > 0) {
+    ctx.fillStyle = `rgba(255, 255, 255, ${screenFlash * 0.3})`;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+
+  // Draw walls with glow effect
   layout.forEach((row, y) => {
     [...row].forEach((cell, x) => {
       const px = x * tileSize;
       const py = y * tileSize;
       if (cell === 'W') {
-        ctx.fillStyle = 'rgba(45, 45, 90, 0.85)';
+        // Wall base
+        ctx.fillStyle = '#1a1a3d';
         ctx.fillRect(px, py, tileSize, tileSize);
-        ctx.strokeStyle = '#0ef3ff33';
-        ctx.strokeRect(px + 4, py + 4, tileSize - 8, tileSize - 8);
+
+        // Inner glow
+        const gradient = ctx.createRadialGradient(
+          px + tileSize/2, py + tileSize/2, 0,
+          px + tileSize/2, py + tileSize/2, tileSize
+        );
+        gradient.addColorStop(0, 'rgba(30, 60, 120, 0.3)');
+        gradient.addColorStop(1, 'rgba(10, 10, 30, 0)');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(px, py, tileSize, tileSize);
+
+        // Border glow
+        ctx.strokeStyle = `rgba(14, 243, 255, ${0.15 + Math.sin(Date.now() / 1000) * 0.05})`;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(px + 3, py + 3, tileSize - 6, tileSize - 6);
       }
-      // Draw ghost house gate
+      // Ghost house gate
       if (cell === '-') {
-        ctx.fillStyle = '#ff9cce';
+        const pulse = 0.7 + Math.sin(Date.now() / 300) * 0.3;
+        ctx.fillStyle = `rgba(255, 156, 206, ${pulse})`;
         ctx.fillRect(px, py + tileSize / 2 - 2, tileSize, 4);
+
+        // Gate glow
+        ctx.shadowColor = '#ff9cce';
+        ctx.shadowBlur = 10;
+        ctx.fillRect(px, py + tileSize / 2 - 2, tileSize, 4);
+        ctx.shadowBlur = 0;
       }
     });
   });
 
+  // Draw pellets with subtle animation
   pellets.forEach((key) => {
     const [x, y] = key.split(',').map(Number);
+    const pulse = 1 + Math.sin(Date.now() / 500 + x + y) * 0.1;
     ctx.fillStyle = '#f6d646';
+    ctx.shadowColor = '#f6d646';
+    ctx.shadowBlur = 4;
     ctx.beginPath();
-    ctx.arc(x * tileSize + tileSize / 2, y * tileSize + tileSize / 2, 3, 0, Math.PI * 2);
+    ctx.arc(x * tileSize + tileSize / 2, y * tileSize + tileSize / 2, 3 * pulse, 0, Math.PI * 2);
     ctx.fill();
+    ctx.shadowBlur = 0;
   });
 
+  // Draw power pellets with strong pulse
   powerPellets.forEach((key) => {
     const [x, y] = key.split(',').map(Number);
+    const pulse = 5 + Math.sin(Date.now() / 150) * 3;
     ctx.fillStyle = '#6ef5c6';
+    ctx.shadowColor = '#6ef5c6';
+    ctx.shadowBlur = 15;
     ctx.beginPath();
-    const pulse = 4 + Math.sin(Date.now() / 200) * 2;
     ctx.arc(x * tileSize + tileSize / 2, y * tileSize + tileSize / 2, pulse, 0, Math.PI * 2);
     ctx.fill();
+    ctx.shadowBlur = 0;
   });
 
+  // Draw fruits
   fruitTimers.forEach((fruit) => {
-    const { x, y } = fruit;
-    ctx.fillStyle = '#ff5dd9';
+    const { x, y, type } = fruit;
+    const fruitInfo = fruitTypes[type % fruitTypes.length];
+    const bounce = Math.sin(Date.now() / 200) * 2;
+
+    ctx.fillStyle = fruitInfo.color;
+    ctx.shadowColor = fruitInfo.color;
+    ctx.shadowBlur = 10;
     ctx.beginPath();
-    ctx.arc(x * tileSize + tileSize / 2, y * tileSize + tileSize / 2, 7, 0, Math.PI * 2);
+    ctx.arc(x * tileSize + tileSize / 2, y * tileSize + tileSize / 2 + bounce, 8, 0, Math.PI * 2);
     ctx.fill();
+
+    // Stem
     ctx.fillStyle = '#34d1ff';
-    ctx.fillRect(x * tileSize + tileSize / 2 - 1, y * tileSize + tileSize / 2 - 8, 2, 6);
+    ctx.fillRect(x * tileSize + tileSize / 2 - 1, y * tileSize + tileSize / 2 - 10 + bounce, 2, 6);
+    ctx.shadowBlur = 0;
   });
+
+  ctx.restore();
 }
 
 function drawPlayers() {
-  players.forEach((p) => {
-    if (!p.alive) return;
+  players.forEach((p, idx) => {
+    if (!p.alive) {
+      // Death animation
+      if (p.deathTimer > 0) {
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        const progress = 1 - p.deathTimer;
+        const segments = 8;
+        for (let i = 0; i < segments; i++) {
+          const angle = (Math.PI * 2 * i) / segments;
+          const dist = progress * 30;
+          ctx.fillStyle = p.color;
+          ctx.globalAlpha = p.deathTimer;
+          ctx.beginPath();
+          ctx.arc(Math.cos(angle) * dist, Math.sin(angle) * dist, 4 * p.deathTimer, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+      return;
+    }
+
+    // Draw trail
+    p.trail.forEach((t, i) => {
+      const alpha = (i / p.trail.length) * 0.3;
+      ctx.fillStyle = p.color;
+      ctx.globalAlpha = alpha;
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, (tileSize / 2 - 3) * (i / p.trail.length), 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+
     ctx.save();
     ctx.translate(p.x, p.y);
+
+    // Invincibility flash
+    if (p.invincible > 0 && Math.floor(Date.now() / 100) % 2) {
+      ctx.globalAlpha = 0.5;
+    }
+
     const angle = Math.atan2(p.dir.y, p.dir.x) || 0;
     ctx.rotate(angle);
-    const mouthOpen = (Math.sin(Date.now() / 120) + 1) * 0.15;
+
+    // Glow effect
+    ctx.shadowColor = p.color;
+    ctx.shadowBlur = 15;
+
+    const mouthOpen = (Math.sin(Date.now() / 80) + 1) * 0.2;
     ctx.beginPath();
     ctx.moveTo(0, 0);
     ctx.arc(0, 0, tileSize / 2 - 3, mouthOpen, Math.PI * 2 - mouthOpen);
     ctx.fillStyle = p.color;
     ctx.fill();
+
+    // Eye
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.arc(2, -5, 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.shadowBlur = 0;
     ctx.restore();
   });
 }
@@ -221,83 +435,145 @@ function drawGhosts() {
     ctx.save();
     ctx.translate(g.x, g.y);
 
+    // Wobble animation
+    g.wobble += 0.1;
+    const wobbleX = Math.sin(g.wobble) * 1;
+    ctx.translate(wobbleX, 0);
+
     // Ghost color based on state
     let ghostColor = g.color;
+    let eyeColor = '#fff';
+    let pupilColor = '#111';
+
     if (g.eaten) {
-      ghostColor = '#9ea0ff44'; // Transparent when eaten
-    } else if (frightenedTimer > 0) {
-      // Flash white when frightened timer is low
-      if (frightenedTimer < 2 && Math.floor(Date.now() / 200) % 2) {
+      ghostColor = 'rgba(158, 160, 255, 0.3)';
+    } else if (frightenedTimer > 0 && !g.inHouse) {
+      if (frightenedTimer < 2 && Math.floor(Date.now() / 150) % 2) {
         ghostColor = '#ffffff';
+        eyeColor = '#ff0000';
       } else {
-        ghostColor = '#2121de'; // Blue when frightened
+        ghostColor = '#2121de';
+        pupilColor = '#ff0000';
       }
+    }
+
+    // Ghost glow
+    if (!g.eaten) {
+      ctx.shadowColor = ghostColor;
+      ctx.shadowBlur = 12;
     }
 
     ctx.fillStyle = ghostColor;
+
+    // Ghost body
     ctx.beginPath();
     ctx.arc(0, -4, tileSize / 2 - 4, Math.PI, Math.PI * 2);
-    ctx.rect(-tileSize / 2 + 4, -4, tileSize - 8, tileSize / 2 + 6);
-    ctx.fill();
+    ctx.lineTo(tileSize / 2 - 4, tileSize / 2);
 
     // Wavy bottom
-    if (!g.eaten) {
-      const waveOffset = Date.now() / 100;
-      for (let i = 0; i < 3; i++) {
-        const wx = -tileSize / 2 + 4 + i * ((tileSize - 8) / 3);
-        const wy = tileSize / 2 + 2 + Math.sin(waveOffset + i) * 2;
-        ctx.beginPath();
-        ctx.arc(wx + (tileSize - 8) / 6, wy, (tileSize - 8) / 6, 0, Math.PI);
-        ctx.fill();
+    const waveTime = Date.now() / 100;
+    const waveCount = 4;
+    for (let i = waveCount; i >= 0; i--) {
+      const wx = (tileSize / 2 - 4) - (i * (tileSize - 8) / waveCount);
+      const wy = tileSize / 2 + Math.sin(waveTime + i * 1.5) * 3;
+      ctx.lineTo(wx, wy);
+    }
+    ctx.lineTo(-tileSize / 2 + 4, -4);
+    ctx.closePath();
+    ctx.fill();
+
+    // Eyes (always visible)
+    ctx.fillStyle = eyeColor;
+    ctx.beginPath();
+    ctx.ellipse(-5, -3, 5, 6, 0, 0, Math.PI * 2);
+    ctx.ellipse(5, -3, 5, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Pupils - look in direction of movement
+    const pupilOffsetX = g.dir.x * 2;
+    const pupilOffsetY = g.dir.y * 2;
+    ctx.fillStyle = pupilColor;
+    ctx.beginPath();
+    ctx.arc(-5 + pupilOffsetX, -3 + pupilOffsetY, 2.5, 0, Math.PI * 2);
+    ctx.arc(5 + pupilOffsetX, -3 + pupilOffsetY, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Scared mouth when frightened
+    if (frightenedTimer > 0 && !g.eaten && !g.inHouse) {
+      ctx.strokeStyle = eyeColor;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-6, 6);
+      for (let i = 0; i < 5; i++) {
+        ctx.lineTo(-6 + i * 3, 6 + (i % 2 === 0 ? 0 : 3));
       }
+      ctx.stroke();
     }
 
-    // Eyes
-    if (!g.eaten || g.mode === GHOST_MODE.EATEN) {
-      ctx.fillStyle = '#fff';
-      ctx.beginPath();
-      ctx.arc(-6, -2, 5, 0, Math.PI * 2);
-      ctx.arc(6, -2, 5, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Pupils - look in direction of movement
-      const pupilOffsetX = g.dir.x * 2;
-      const pupilOffsetY = g.dir.y * 2;
-      ctx.fillStyle = frightenedTimer > 0 && !g.eaten ? '#0b0b3b' : '#111';
-      ctx.beginPath();
-      ctx.arc(-6 + pupilOffsetX, -2 + pupilOffsetY, 2.5, 0, Math.PI * 2);
-      ctx.arc(6 + pupilOffsetX, -2 + pupilOffsetY, 2.5, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
+    ctx.shadowBlur = 0;
     ctx.restore();
   });
 }
 
-function drawReadyScreen() {
+function drawUI() {
+  // Ready screen
   if (readyTimer > 0) {
     ctx.fillStyle = '#f6d646';
-    ctx.font = '20px "Press Start 2P", monospace';
+    ctx.shadowColor = '#f6d646';
+    ctx.shadowBlur = 20;
+    ctx.font = '24px "Press Start 2P", monospace';
     ctx.textAlign = 'center';
     ctx.fillText('READY!', canvas.width / 2, canvas.height / 2);
+    ctx.shadowBlur = 0;
   }
-}
 
-function drawLevelIndicator() {
+  // Level indicator
   ctx.fillStyle = '#ff5dd9';
   ctx.font = '10px "Press Start 2P", monospace';
   ctx.textAlign = 'left';
   ctx.fillText(`LVL ${level}`, 10, canvas.height - 10);
+
+  // Combo indicator
+  if (comboCount > 1) {
+    ctx.fillStyle = `rgba(255, 200, 50, ${Math.min(1, comboTimer)})`;
+    ctx.font = '12px "Press Start 2P", monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText(`${comboCount}x COMBO!`, canvas.width - 10, canvas.height - 10);
+  }
+
+  // Ghost multiplier when active
+  if (frightenedTimer > 0 && ghostMultiplier > 1) {
+    ctx.fillStyle = '#2121de';
+    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(`GHOST x${ghostMultiplier}`, canvas.width / 2, 20);
+  }
+
+  // Frightened timer bar
+  if (frightenedTimer > 0) {
+    const barWidth = 100;
+    const barHeight = 6;
+    const x = canvas.width / 2 - barWidth / 2;
+    const y = 28;
+    const progress = frightenedTimer / 8;
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(x, y, barWidth, barHeight);
+    ctx.fillStyle = frightenedTimer < 2 ? '#ff0000' : '#2121de';
+    ctx.fillRect(x, y, barWidth * progress, barHeight);
+  }
+
+  // Draw particles and popups
+  drawParticles();
 }
 
-// Check if a position is inside the ghost house
+// ==================== COLLISION & MOVEMENT ====================
 function isInGhostHouse(x, y) {
   const tileX = Math.floor(x / tileSize);
   const tileY = Math.floor(y / tileSize);
   return tileY >= 12 && tileY <= 15 && tileX >= 10 && tileX <= 17;
 }
 
-// Check if tile is passable (for ghosts - can pass through gate)
 function isPassable(nx, ny, isGhost = false, isExiting = false) {
   if (nx < 0) nx = cols - 1;
   if (nx >= cols) nx = 0;
@@ -306,8 +582,7 @@ function isPassable(nx, ny, isGhost = false, isExiting = false) {
   const cell = row[nx];
   if (cell === undefined) return false;
   if (cell === 'W') return false;
-  // Ghosts can pass through gate when exiting or eaten
-  if (cell === '-' && isGhost && (isExiting)) return true;
+  if (cell === '-' && isGhost && isExiting) return true;
   if (cell === '-' && !isGhost) return false;
   return true;
 }
@@ -331,13 +606,21 @@ function tryTurn(player) {
 }
 
 function movePlayer(player, dt) {
+  if (player.invincible > 0) player.invincible -= dt;
+
   tryTurn(player);
-  const speed = baseSpeed + (level - 1) * 5; // Slightly faster each level
+  const speed = baseSpeed + (level - 1) * 5;
   const nextX = player.x + player.dir.x * speed * dt;
   const nextY = player.y + player.dir.y * speed * dt;
   const tileX = Math.floor(nextX / tileSize);
   const tileY = Math.floor(nextY / tileSize);
+
   if (!isWall(tileX, tileY)) {
+    // Update trail
+    if (player.dir.x !== 0 || player.dir.y !== 0) {
+      player.trail.push({ x: player.x, y: player.y });
+      if (player.trail.length > 8) player.trail.shift();
+    }
     player.x = nextX;
     player.y = nextY;
   } else {
@@ -350,8 +633,11 @@ function movePlayer(player, dt) {
 
 function getGhostTarget(ghost, players) {
   const personality = ghost.personality;
-  const target = players.reduce((best, p) => {
-    if (!p.alive) return best;
+  const alivePlayers = players.filter(p => p.alive);
+  if (alivePlayers.length === 0) return null;
+
+  // Find closest player
+  const target = alivePlayers.reduce((best, p) => {
     const dist = Math.hypot(p.x - ghost.x, p.y - ghost.y);
     if (!best || dist < best.dist) return { dist, p };
     return best;
@@ -362,34 +648,37 @@ function getGhostTarget(ghost, players) {
   switch (personality) {
     case 0: // Blinky - direct chase
       return { x: target.x, y: target.y };
-    case 1: // Inky - target 4 tiles ahead of player
+    case 1: // Inky - ambush (target 4 tiles ahead)
       return {
         x: target.x + target.dir.x * tileSize * 4,
         y: target.y + target.dir.y * tileSize * 4
       };
-    case 2: // Clyde - chase when far, scatter when close
+    case 2: // Clyde - shy (scatter when close)
       const distToPlayer = Math.hypot(target.x - ghost.x, target.y - ghost.y);
       if (distToPlayer < tileSize * 8) {
         return scatterTargets[ghost.personality];
       }
       return { x: target.x, y: target.y };
+    case 3: // Pinky - target 2 tiles ahead
+      return {
+        x: target.x + target.dir.x * tileSize * 2,
+        y: target.y + target.dir.y * tileSize * 2
+      };
     default:
       return { x: target.x, y: target.y };
   }
 }
 
 function moveGhost(ghost, dt) {
-  // Handle exit delay for staggered ghost exits
   if (ghost.exitDelay > 0) {
     ghost.exitDelay -= dt;
-    // Bounce up and down while waiting
     ghost.y = ghost.startY + Math.sin(Date.now() / 200) * 3;
     return;
   }
 
-  const currentSpeed = ghost.eaten ? ghostSpeed * 2 :
-                       (frightenedTimer > 0 ? ghostSpeed * 0.6 :
-                        ghostSpeed + (level - 1) * 3);
+  const currentSpeed = ghost.eaten ? ghostSpeed * 2.5 :
+                       (frightenedTimer > 0 && !ghost.inHouse ? ghostSpeed * 0.5 :
+                        ghostSpeed + (level - 1) * 4);
   const speed = currentSpeed * dt;
 
   // Determine ghost mode
@@ -407,30 +696,24 @@ function moveGhost(ghost, dt) {
 
   let target;
 
-  // Determine target based on mode
   switch (ghost.mode) {
     case GHOST_MODE.EATEN:
-      // Return to ghost house
       target = { x: ghostHouseCenter.x * tileSize, y: ghostHouseCenter.y * tileSize };
       break;
     case GHOST_MODE.EXITING:
-      // Exit the ghost house
       target = { x: ghostHouseExit.x * tileSize, y: ghostHouseExit.y * tileSize };
       break;
     case GHOST_MODE.FRIGHTENED:
-      // Random movement when frightened
       target = null;
       break;
     case GHOST_MODE.SCATTER:
-      // Go to corner
       target = {
-        x: scatterTargets[ghost.personality].x * tileSize,
-        y: scatterTargets[ghost.personality].y * tileSize
+        x: scatterTargets[ghost.personality % 4].x * tileSize,
+        y: scatterTargets[ghost.personality % 4].y * tileSize
       };
       break;
     case GHOST_MODE.CHASE:
     default:
-      // Chase player with personality-based targeting
       target = getGhostTarget(ghost, players);
       break;
   }
@@ -453,10 +736,8 @@ function moveGhost(ghost, dt) {
   let bestDir;
 
   if (ghost.mode === GHOST_MODE.FRIGHTENED) {
-    // Random movement when frightened
     bestDir = validOptions[Math.floor(Math.random() * validOptions.length)];
   } else if (target) {
-    // Move towards target
     bestDir = validOptions.sort((a, b) => {
       const da = Math.hypot(target.x - (ghost.x + a.x * tileSize), target.y - (ghost.y + a.y * tileSize));
       const db = Math.hypot(target.x - (ghost.x + b.x * tileSize), target.y - (ghost.y + b.y * tileSize));
@@ -472,7 +753,6 @@ function moveGhost(ghost, dt) {
   ghost.y += ghost.dir.y * speed;
   wrapPosition(ghost);
 
-  // Check if ghost has exited the house
   if (ghost.mode === GHOST_MODE.EXITING) {
     const exitY = ghostHouseExit.y * tileSize;
     if (ghost.y <= exitY) {
@@ -481,7 +761,6 @@ function moveGhost(ghost, dt) {
     }
   }
 
-  // Check if eaten ghost has returned home
   if (ghost.mode === GHOST_MODE.EATEN) {
     const homeX = ghostHouseCenter.x * tileSize;
     const homeY = ghostHouseCenter.y * tileSize;
@@ -489,6 +768,7 @@ function moveGhost(ghost, dt) {
       ghost.eaten = false;
       ghost.inHouse = true;
       ghost.mode = GHOST_MODE.EXITING;
+      ghost.exitDelay = 0.5;
     }
   }
 }
@@ -497,25 +777,40 @@ function collide(a, b) {
   return Math.hypot(a.x - b.x, a.y - b.y) < tileSize / 1.5;
 }
 
+// ==================== GAME LOGIC ====================
 function eatPellet(player) {
   const key = `${Math.floor(player.x / tileSize)},${Math.floor(player.y / tileSize)}`;
-  if (pellets.delete(key)) {
-    addScore(player, 10);
-    playSound(620, 0.05, 0.1);
-  }
-  if (powerPellets.delete(key)) {
-    frightenedTimer = Math.max(8 - level * 0.5, 3); // Shorter frightened time at higher levels
-    ghostMultiplier = 1; // Reset multiplier
-    addScore(player, 50);
-    playSound(220, 0.2, 0.3);
 
-    // Reverse ghost directions when frightened
+  if (pellets.delete(key)) {
+    // Combo system
+    comboTimer = 0.5;
+    comboCount++;
+    const comboBonus = Math.min(comboCount, 10);
+    const points = 10 + comboBonus;
+
+    addScore(player, points);
+    createParticle(player.x, player.y, '#f6d646', 'pellet');
+    playSound(520 + comboCount * 20, 0.04, 0.08);
+
+    // Update siren speed based on remaining pellets
+    sirenSpeed = 1 + (1 - pellets.size / totalPellets) * 0.5;
+  }
+
+  if (powerPellets.delete(key)) {
+    frightenedTimer = Math.max(8 - level * 0.5, 4);
+    ghostMultiplier = 1;
+    addScore(player, 50);
+    createParticle(player.x, player.y, '#6ef5c6', 'ghost');
+    playSound(150, 0.3, 0.25);
+    screenFlash = 0.5;
+
     ghosts.forEach(g => {
       if (!g.inHouse && !g.eaten) {
         g.dir = { x: -g.dir.x, y: -g.dir.y };
       }
     });
   }
+
   if (pellets.size === 0 && powerPellets.size === 0) {
     nextLevel();
   }
@@ -524,13 +819,22 @@ function eatPellet(player) {
 function addScore(player, points) {
   player.score += points;
 
-  // Extra life at 10000 points
   const totalScore = players[0].score + players[1].score;
   const prevScore = totalScore - points;
-  if (prevScore < 10000 && totalScore >= 10000) {
+
+  // Extra life at 10000 and every 50000 after
+  if (Math.floor(prevScore / 10000) < Math.floor(totalScore / 10000)) {
     lives += 1;
     playSound(880, 0.3, 0.2);
-    playSound(1100, 0.3, 0.2);
+    playSound(1100, 0.2, 0.2);
+    playSound(1320, 0.2, 0.2);
+    screenFlash = 0.3;
+  }
+
+  // Update high score
+  if (totalScore > highScore) {
+    highScore = totalScore;
+    localStorage.setItem('wackman-highscore', highScore);
   }
 
   updateHud();
@@ -540,9 +844,16 @@ function eatFruit(player) {
   const key = `${Math.floor(player.x / tileSize)},${Math.floor(player.y / tileSize)}`;
   const idx = fruitTimers.findIndex((f) => `${f.x},${f.y}` === key);
   if (idx >= 0) {
+    const fruit = fruitTimers[idx];
+    const fruitInfo = fruitTypes[fruit.type % fruitTypes.length];
     fruitTimers.splice(idx, 1);
-    addScore(player, 100 + level * 50); // More points at higher levels
-    playSound(880, 0.2, 0.2);
+
+    const points = fruitInfo.points + level * 100;
+    addScore(player, points);
+    createParticle(player.x, player.y, fruitInfo.color, 'ghost');
+    createScorePopup(player.x, player.y - 20, points, fruitInfo.color);
+    playSound(880, 0.15, 0.2);
+    playSound(1100, 0.15, 0.15);
   }
 }
 
@@ -551,16 +862,44 @@ function nextLevel() {
   resetBoard();
   resetPositions();
   fruitTimers.length = 0;
-  readyTimer = 2;
+  particles.length = 0;
+  scorePopups.length = 0;
+  readyTimer = 2.5;
   paused = true;
+  screenFlash = 1;
+
+  playSound(440, 0.2, 0.15);
+  playSound(550, 0.2, 0.15);
+  playSound(660, 0.2, 0.15);
+  playSound(880, 0.3, 0.2);
+
   setTimeout(() => {
     paused = false;
     readyTimer = 0;
     spawnFruit();
-  }, 2000);
+  }, 2500);
 }
 
 function update(dt) {
+  // Update screen effects
+  screenShake = Math.max(0, screenShake - dt * 5);
+  screenFlash = Math.max(0, screenFlash - dt * 3);
+
+  // Update combo timer
+  if (comboTimer > 0) {
+    comboTimer -= dt;
+    if (comboTimer <= 0) comboCount = 0;
+  }
+
+  updateParticles(dt);
+
+  // Update death animations
+  players.forEach(p => {
+    if (!p.alive && p.deathTimer > 0) {
+      p.deathTimer -= dt;
+    }
+  });
+
   if (paused) return;
   if (readyTimer > 0) {
     readyTimer -= dt;
@@ -569,13 +908,13 @@ function update(dt) {
 
   frightenedTimer = Math.max(0, frightenedTimer - dt);
   if (frightenedTimer === 0) {
-    ghostMultiplier = 1; // Reset multiplier when frightened ends
+    ghostMultiplier = 1;
   }
 
-  // Toggle scatter/chase mode periodically
+  // Toggle scatter/chase mode
   scatterTimer += dt;
   const scatterDuration = Math.max(7 - level, 3);
-  const chaseDuration = 20 + level * 2;
+  const chaseDuration = 20 + level * 3;
   const cycleDuration = scatterDuration + chaseDuration;
   const cyclePos = scatterTimer % cycleDuration;
   scatterMode = cyclePos < scatterDuration;
@@ -583,13 +922,15 @@ function update(dt) {
   players.forEach((p) => p.alive && movePlayer(p, dt));
   ghosts.forEach((g) => moveGhost(g, dt));
   checkCollisions();
+
+  // Update fruit timers
   fruitTimers.forEach((f) => (f.time -= dt));
   for (let i = fruitTimers.length - 1; i >= 0; i -= 1) {
     if (fruitTimers[i].time <= 0) fruitTimers.splice(i, 1);
   }
 
-  // Spawn fruit periodically
-  if (Math.random() < 0.001 && fruitTimers.length < 2) {
+  // Spawn fruit
+  if (Math.random() < 0.002 && fruitTimers.length < 2) {
     spawnFruit();
   }
 }
@@ -597,66 +938,97 @@ function update(dt) {
 function checkCollisions() {
   ghosts.forEach((g) => {
     players.forEach((p) => {
-      if (!p.alive || g.eaten || g.inHouse) return;
+      if (!p.alive || g.eaten || g.inHouse || p.invincible > 0) return;
       if (collide(g, p)) {
         if (frightenedTimer > 0) {
           g.eaten = true;
-          addScore(p, 200 * ghostMultiplier);
-          ghostMultiplier *= 2; // Double points for each consecutive ghost
-          playSound(440, 0.2, 0.2);
-          playSound(660, 0.15, 0.2);
+          const points = 200 * ghostMultiplier;
+          addScore(p, points);
+          createParticle(g.x, g.y, g.color, 'ghost');
+          createScorePopup(g.x, g.y - 20, points, '#fff');
+          ghostMultiplier *= 2;
+          playSound(440, 0.15, 0.2);
+          playSound(660, 0.1, 0.15);
+          playSound(880, 0.1, 0.1);
         } else {
-          loseLife();
+          loseLife(p);
         }
       }
     });
   });
 }
 
-function loseLife() {
+function loseLife(deadPlayer) {
   lives -= 1;
   updateHud();
-  playSound(120, 0.35, 0.4);
-  playSound(80, 0.4, 0.3);
+  screenShake = 1;
+
+  // Death effects
+  deadPlayer.alive = false;
+  deadPlayer.deathTimer = 1;
+  createParticle(deadPlayer.x, deadPlayer.y, deadPlayer.color, 'death');
+
+  playSound(200, 0.3, 0.3);
+  playSound(150, 0.3, 0.25);
+  playSound(100, 0.4, 0.2);
+
   if (lives <= 0) {
-    paused = true;
-    showGameOver();
+    setTimeout(() => {
+      paused = true;
+      showGameOver();
+    }, 1500);
     return;
   }
-  resetPositions();
-  readyTimer = 1.5;
+
+  setTimeout(() => {
+    resetPositions();
+    readyTimer = 1.5;
+  }, 1500);
 }
 
 function resetPositions() {
   players[0] = { ...createPlayer(11, playerStartRow, '#f6d646', ['ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight']), score: players[0].score };
   players[1] = { ...createPlayer(16, playerStartRow, '#6ef5c6', ['KeyW', 'KeyA', 'KeyS', 'KeyD']), score: players[1].score };
+  players.forEach(p => p.invincible = 2); // Brief invincibility after respawn
+
   ghosts.forEach((g, idx) => {
-    const colors = ['#ff4b8b', '#53a4ff', '#ff8c42'];
-    const ghostCols = [13, 12, 15];
-    const ghostRows = [14, 14, 14];
+    const colors = ['#ff4b8b', '#53a4ff', '#ff8c42', '#b967ff'];
+    const ghostCols = [13, 12, 14, 13];
+    const ghostRows = [14, 14, 14, 13];
     const fresh = createGhost(ghostCols[idx], ghostRows[idx], colors[idx], idx);
     ghosts[idx] = fresh;
   });
   frightenedTimer = 0;
   ghostMultiplier = 1;
+  comboCount = 0;
 }
 
 function showGameOver() {
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
+
   ctx.fillStyle = '#ff4b8b';
-  ctx.font = '24px "Press Start 2P", monospace';
+  ctx.shadowColor = '#ff4b8b';
+  ctx.shadowBlur = 30;
+  ctx.font = '28px "Press Start 2P", monospace';
   ctx.textAlign = 'center';
-  ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 20);
+  ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 40);
 
   const totalScore = players[0].score + players[1].score;
   ctx.fillStyle = '#f6d646';
-  ctx.font = '14px "Press Start 2P", monospace';
-  ctx.fillText(`Total: ${totalScore}`, canvas.width / 2, canvas.height / 2 + 20);
+  ctx.shadowColor = '#f6d646';
+  ctx.font = '16px "Press Start 2P", monospace';
+  ctx.fillText(`SCORE: ${totalScore}`, canvas.width / 2, canvas.height / 2 + 10);
+
+  ctx.fillStyle = '#6ef5c6';
+  ctx.shadowColor = '#6ef5c6';
+  ctx.font = '12px "Press Start 2P", monospace';
+  ctx.fillText(`HIGH SCORE: ${highScore}`, canvas.width / 2, canvas.height / 2 + 40);
 
   ctx.fillStyle = '#c5d4ff';
+  ctx.shadowBlur = 0;
   ctx.font = '10px "Press Start 2P", monospace';
-  ctx.fillText('Press Start to restart', canvas.width / 2, canvas.height / 2 + 50);
+  ctx.fillText('Press Start to play again', canvas.width / 2, canvas.height / 2 + 80);
 }
 
 function spawnFruit() {
@@ -670,20 +1042,23 @@ function spawnFruit() {
   });
   if (emptyTiles.length) {
     const choice = emptyTiles[Math.floor(Math.random() * emptyTiles.length)];
-    fruitTimers.push({ ...choice, time: 10 + Math.random() * 5 });
+    const fruitType = Math.min(level - 1, fruitTypes.length - 1);
+    fruitTimers.push({ ...choice, time: 8 + Math.random() * 4, type: fruitType });
   }
 }
 
+// ==================== GAME LOOP ====================
 function loop(timestamp) {
   if (!lastTime) lastTime = timestamp;
-  const dt = Math.min((timestamp - lastTime) / 1000, 0.1); // Cap dt to prevent large jumps
+  const dt = Math.min((timestamp - lastTime) / 1000, 0.1);
   lastTime = timestamp;
+
   update(dt);
   drawGrid();
   drawPlayers();
   drawGhosts();
-  drawReadyScreen();
-  drawLevelIndicator();
+  drawUI();
+
   requestAnimationFrame(loop);
 }
 
@@ -691,9 +1066,13 @@ function updateHud() {
   document.getElementById('p1-score').textContent = players[0].score;
   document.getElementById('p2-score').textContent = players[1].score;
   document.getElementById('lives').textContent = lives;
+
+  // Update high score display if it exists
+  const highScoreEl = document.getElementById('high-score');
+  if (highScoreEl) highScoreEl.textContent = highScore;
 }
 
-// Audio helpers
+// ==================== AUDIO ====================
 function playSound(frequency, duration = 0.1, gain = 0.15) {
   if (musicMuted) return;
   try {
@@ -701,30 +1080,38 @@ function playSound(frequency, duration = 0.1, gain = 0.15) {
     const oscillator = audioCtx.createOscillator();
     const g = audioCtx.createGain();
     oscillator.frequency.value = frequency;
-    oscillator.type = 'triangle';
+    oscillator.type = 'square';
     g.gain.setValueAtTime(gain, now);
     g.gain.exponentialRampToValueAtTime(0.001, now + duration);
     oscillator.connect(g).connect(audioCtx.destination);
     oscillator.start(now);
     oscillator.stop(now + duration + 0.05);
-  } catch (e) {
-    // Audio context may not be available
-  }
+  } catch (e) {}
 }
 
 function playMusic() {
   if (musicMuted) return;
-  const melody = [440, 523, 659, 523, 392, 330, 392, 523];
+  const melody = [392, 440, 494, 523, 494, 440, 392, 330];
   let idx = 0;
   clearInterval(musicInterval);
   musicInterval = setInterval(() => {
     if (musicMuted || paused) return;
-    playSound(melody[idx % melody.length], 0.2, 0.05);
+    playSound(melody[idx % melody.length], 0.15, 0.04);
     idx += 1;
-  }, 280);
+  }, 250);
 }
 
-// Input
+function playSiren() {
+  if (musicMuted) return;
+  clearInterval(sirenInterval);
+  sirenInterval = setInterval(() => {
+    if (musicMuted || paused || frightenedTimer > 0) return;
+    const freq = 100 + Math.sin(Date.now() / (500 / sirenSpeed)) * 50;
+    playSound(freq, 0.1, 0.02);
+  }, 150);
+}
+
+// ==================== INPUT HANDLING ====================
 window.addEventListener('keydown', (e) => {
   const dir = directions[e.code];
   if (!dir) return;
@@ -733,7 +1120,7 @@ window.addEventListener('keydown', (e) => {
     if (p.keys.includes(e.code)) {
       e.preventDefault();
       p.queued = { ...dir };
-      if (paused && gameStarted) {
+      if (paused && gameStarted && lives > 0) {
         paused = false;
         if (readyTimer <= 0) readyTimer = 0;
       }
@@ -744,22 +1131,65 @@ window.addEventListener('keydown', (e) => {
   });
 });
 
-// Prevent arrow key scrolling
 window.addEventListener('keydown', (e) => {
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
     e.preventDefault();
   }
 });
 
+// ==================== TOUCH CONTROLS ====================
+let touchStartX = 0;
+let touchStartY = 0;
+
+canvas.addEventListener('touchstart', (e) => {
+  touchStartX = e.touches[0].clientX;
+  touchStartY = e.touches[0].clientY;
+  e.preventDefault();
+
+  if (!gameStarted) {
+    startGame();
+  } else if (paused && lives > 0) {
+    paused = false;
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchmove', (e) => {
+  e.preventDefault();
+}, { passive: false });
+
+canvas.addEventListener('touchend', (e) => {
+  const touchEndX = e.changedTouches[0].clientX;
+  const touchEndY = e.changedTouches[0].clientY;
+
+  const dx = touchEndX - touchStartX;
+  const dy = touchEndY - touchStartY;
+
+  const minSwipe = 30;
+
+  if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > minSwipe) {
+    // Horizontal swipe
+    players[0].queued = dx > 0 ? { x: 1, y: 0 } : { x: -1, y: 0 };
+  } else if (Math.abs(dy) > minSwipe) {
+    // Vertical swipe
+    players[0].queued = dy > 0 ? { x: 0, y: 1 } : { x: 0, y: -1 };
+  }
+
+  e.preventDefault();
+}, { passive: false });
+
+// ==================== GAME INITIALIZATION ====================
 function startGame() {
   gameStarted = true;
-  readyTimer = 2;
+  readyTimer = 2.5;
   setTimeout(() => {
     paused = false;
     readyTimer = 0;
-  }, 2000);
+  }, 2500);
   if (audioCtx.state === 'suspended') audioCtx.resume();
-  if (!musicMuted) playMusic();
+  if (!musicMuted) {
+    playMusic();
+    playSiren();
+  }
 }
 
 document.getElementById('start').addEventListener('click', () => {
@@ -769,6 +1199,7 @@ document.getElementById('start').addEventListener('click', () => {
     players[0].score = 0;
     players[1].score = 0;
     scatterTimer = 0;
+    comboCount = 0;
     resetBoard();
     resetPositions();
     updateHud();
@@ -782,14 +1213,17 @@ document.getElementById('start').addEventListener('click', () => {
 
 document.getElementById('mute').addEventListener('click', () => {
   musicMuted = !musicMuted;
-  document.getElementById('mute').textContent = musicMuted ? 'Unmute' : 'Mute';
+  document.getElementById('mute').textContent = musicMuted ? '🔇' : '🔊';
   if (musicMuted) {
     clearInterval(musicInterval);
+    clearInterval(sirenInterval);
   } else {
     playMusic();
+    playSiren();
   }
 });
 
+// Initialize
 resetBoard();
 updateHud();
 requestAnimationFrame(loop);
