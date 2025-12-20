@@ -610,6 +610,24 @@ function movePlayer(player, dt) {
 
   tryTurn(player);
   const speed = baseSpeed + (level - 1) * 5;
+
+  // Calculate tile center for snapping
+  const tileCenterX = Math.floor(player.x / tileSize) * tileSize + tileSize / 2;
+  const tileCenterY = Math.floor(player.y / tileSize) * tileSize + tileSize / 2;
+
+  // Snap to center of lane perpendicular to movement direction
+  // This prevents drifting within corridors
+  if (player.dir.x !== 0) {
+    // Moving horizontally - snap Y to center
+    const snapSpeed = 0.3;
+    player.y += (tileCenterY - player.y) * snapSpeed;
+  }
+  if (player.dir.y !== 0) {
+    // Moving vertically - snap X to center
+    const snapSpeed = 0.3;
+    player.x += (tileCenterX - player.x) * snapSpeed;
+  }
+
   const nextX = player.x + player.dir.x * speed * dt;
   const nextY = player.y + player.dir.y * speed * dt;
   const tileX = Math.floor(nextX / tileSize);
@@ -624,6 +642,13 @@ function movePlayer(player, dt) {
     player.x = nextX;
     player.y = nextY;
   } else {
+    // Hit a wall - snap to tile center to prevent getting stuck
+    if (player.dir.x !== 0) {
+      player.x = tileCenterX;
+    }
+    if (player.dir.y !== 0) {
+      player.y = tileCenterY;
+    }
     player.dir = { x: 0, y: 0 };
   }
   wrapPosition(player);
@@ -748,6 +773,18 @@ function moveGhost(ghost, dt) {
   }
 
   if (bestDir) ghost.dir = bestDir;
+
+  // Calculate tile center for snapping
+  const tileCenterX = Math.floor(ghost.x / tileSize) * tileSize + tileSize / 2;
+  const tileCenterY = Math.floor(ghost.y / tileSize) * tileSize + tileSize / 2;
+
+  // Snap ghosts to center of lane perpendicular to movement
+  if (ghost.dir.x !== 0) {
+    ghost.y += (tileCenterY - ghost.y) * 0.3;
+  }
+  if (ghost.dir.y !== 0) {
+    ghost.x += (tileCenterX - ghost.x) * 0.3;
+  }
 
   ghost.x += ghost.dir.x * speed;
   ghost.y += ghost.dir.y * speed;
