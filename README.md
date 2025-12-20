@@ -11,7 +11,7 @@ This repository now includes an automated GitHub Pages workflow. Push any static
 After the first successful workflow run, the site will be available at your repository's GitHub Pages URL, typically:
 
 ```
-https://<your-username>.github.io/wack-man/
+https://falvarez1.github.io/wack-man/
 ```
 
 You can confirm the exact link in the deploy job summary inside the Actions tab once a run finishes.
