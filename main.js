@@ -37,6 +37,10 @@ const FRIGHTENED_DURATION_DECREASE_PER_LEVEL = 0.5;
 const FRIGHTENED_MIN_DURATION = 4;
 const FRIGHTENED_WARNING_TIME = 2;
 
+// Slow-motion effect configuration
+const SLOWMO_DURATION = 0.6;
+const SLOWMO_FACTOR = 0.15;
+
 // Scatter/Chase mode timing
 const SCATTER_BASE_DURATION = 7;
 const SCATTER_MIN_DURATION = 3;
@@ -476,6 +480,7 @@ let ghostMultiplier = 1;
 let musicMuted = false;
 let sirenSpeed = 1;
 let singlePlayerMode = true; // false = 2P mode, true = 1P mode
+let slowMotionTimer = 0;
 
 // ==================== GAME SETTINGS ====================
 let currentDifficulty = 'NORMAL';
@@ -2000,9 +2005,11 @@ function checkCollisions() {
             stats.longestCombo = comboCount;
           }
 
-          playSound(440, 0.15, 0.2);
-          playSound(660, 0.1, 0.15);
-          playSound(880, 0.1, 0.1);
+          // Trigger slow-motion effect
+          slowMotionTimer = SLOWMO_DURATION;
+
+          // Enhanced ghost eating sound effect (like arcade)
+          playGhostEatenSound();
         } else {
           loseLife(p);
         }
@@ -2181,8 +2188,14 @@ function spawnFruit() {
 // ==================== GAME LOOP ====================
 function loop(timestamp) {
   if (!lastTime) lastTime = timestamp;
-  const dt = Math.min((timestamp - lastTime) / 1000, 0.1);
+  let dt = Math.min((timestamp - lastTime) / 1000, 0.1);
   lastTime = timestamp;
+
+  // Apply slow-motion effect when eating ghosts
+  if (slowMotionTimer > 0) {
+    dt *= SLOWMO_FACTOR;
+    slowMotionTimer -= dt / SLOWMO_FACTOR; // Decrement in real time
+  }
 
   update(dt);
   drawGrid();
@@ -2229,6 +2242,44 @@ function playSound(frequency, duration = 0.1, gain = 0.15) {
     oscillator.stop(now + duration + 0.05);
   } catch (e) {
     console.warn(`Failed to play sound: ${e.message}`);
+  }
+}
+
+/**
+ * Plays the ghost eaten sound effect (arcade-style rising pitch)
+ */
+function playGhostEatenSound() {
+  if (musicMuted) return;
+  try {
+    const now = audioCtx.currentTime;
+
+    // Create a series of rising tones like the original arcade game
+    const notes = [
+      { freq: 523, time: 0.00, duration: 0.08 },  // C5
+      { freq: 659, time: 0.08, duration: 0.08 },  // E5
+      { freq: 784, time: 0.16, duration: 0.08 },  // G5
+      { freq: 1047, time: 0.24, duration: 0.12 }, // C6
+    ];
+
+    notes.forEach(note => {
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+
+      oscillator.frequency.value = note.freq;
+      oscillator.type = 'sine'; // Sine wave for smoother arcade sound
+
+      const startTime = now + note.time;
+      const endTime = startTime + note.duration;
+
+      gainNode.gain.setValueAtTime(0.25 * masterVolume, startTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, endTime);
+
+      oscillator.connect(gainNode).connect(audioCtx.destination);
+      oscillator.start(startTime);
+      oscillator.stop(endTime + 0.01);
+    });
+  } catch (e) {
+    console.warn(`Failed to play ghost eaten sound: ${e.message}`);
   }
 }
 
