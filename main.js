@@ -1321,6 +1321,43 @@ function moveGhost(ghost, dt) {
     return;
   }
 
+  // Special simple movement for eaten ghosts returning home
+  // Move directly to ghost house without pathfinding or wall collision
+  if (ghost.eaten && ghost.mode === GHOST_MODE.EATEN) {
+    const homeX = ghostHouseCenter.x * tileSize + tileSize / 2;
+    const homeY = ghostHouseCenter.y * tileSize + tileSize / 2;
+
+    // Calculate direct vector to home
+    const dx = homeX - ghost.x;
+    const dy = homeY - ghost.y;
+    const distance = Math.hypot(dx, dy);
+
+    // Move directly toward home (no pathfinding, no wall collision)
+    if (distance > speed) {
+      // Normalize direction and move
+      ghost.x += (dx / distance) * speed;
+      ghost.y += (dy / distance) * speed;
+
+      // Update direction for visual purposes
+      const angle = Math.atan2(dy, dx);
+      if (Math.abs(Math.cos(angle)) > Math.abs(Math.sin(angle))) {
+        ghost.dir = { x: Math.sign(dx), y: 0 };
+      } else {
+        ghost.dir = { x: 0, y: Math.sign(dy) };
+      }
+    } else {
+      // Reached home - reset ghost
+      ghost.x = homeX;
+      ghost.y = homeY;
+      ghost.eaten = false;
+      ghost.inHouse = true;
+      ghost.mode = GHOST_MODE.EXITING;
+      ghost.exitDelay = 0.5;
+      ghost.lastDecisionTile = { x: -1, y: -1 };
+    }
+    return;
+  }
+
   // Determine ghost mode
   if (ghost.eaten) {
     ghost.mode = GHOST_MODE.EATEN;
@@ -1467,23 +1504,6 @@ function moveGhost(ghost, dt) {
   }
 
   wrapPosition(ghost);
-
-  // Handle ghosts returning home after being eaten
-  if (ghost.mode === GHOST_MODE.EATEN) {
-    const homeX = ghostHouseCenter.x * tileSize + tileSize / 2;
-    const homeY = ghostHouseCenter.y * tileSize + tileSize / 2;
-    // Check if ghost has reached the ghost house area (more generous check)
-    if (ghost.y >= ghostHouseCenter.y * tileSize && Math.abs(ghost.x - homeX) < tileSize) {
-      ghost.eaten = false;
-      ghost.inHouse = true;
-      ghost.mode = GHOST_MODE.EXITING;
-      ghost.exitDelay = 0.5;
-      // Reset position and decision tracking
-      ghost.x = homeX;
-      ghost.y = homeY;
-      ghost.lastDecisionTile = { x: -1, y: -1 };
-    }
-  }
 }
 
 /**
