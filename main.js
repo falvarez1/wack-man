@@ -380,7 +380,7 @@ let scatterMode = true;
 let ghostMultiplier = 1;
 let musicMuted = false;
 let sirenSpeed = 1;
-let singlePlayerMode = false; // false = 2P mode, true = 1P mode
+let singlePlayerMode = true; // false = 2P mode, true = 1P mode
 
 // ==================== AUDIO SYSTEM ====================
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -995,6 +995,7 @@ function getGhostTarget(ghost, players) {
 }
 
 function moveGhost(ghost, dt) {
+  // While waiting to exit, bob up and down
   if (ghost.exitDelay > 0) {
     ghost.exitDelay -= dt;
     ghost.y = ghost.startY + Math.sin(Date.now() / 200) * 3;
@@ -1005,6 +1006,33 @@ function moveGhost(ghost, dt) {
                        (frightenedTimer > 0 && !ghost.inHouse ? ghostSpeed * GHOST_FRIGHTENED_SPEED_MULTIPLIER :
                         ghostSpeed + (level - 1) * GHOST_SPEED_INCREASE_PER_LEVEL);
   const speed = currentSpeed * dt;
+
+  // Special simple movement for ghosts exiting the house
+  // Move directly to exit position without complex pathfinding
+  if (ghost.inHouse && ghost.mode === GHOST_MODE.EXITING) {
+    const exitX = ghostHouseExit.x * tileSize + tileSize / 2;
+    const exitY = ghostHouseExit.y * tileSize + tileSize / 2;
+
+    // First, move horizontally to align with exit
+    if (Math.abs(ghost.x - exitX) > 2) {
+      ghost.dir = ghost.x < exitX ? { x: 1, y: 0 } : { x: -1, y: 0 };
+      ghost.x += ghost.dir.x * speed;
+    } else {
+      // Then move upward to exit
+      ghost.x = exitX; // Snap to center
+      ghost.dir = { x: 0, y: -1 };
+      ghost.y += ghost.dir.y * speed;
+
+      // Check if ghost has exited
+      if (ghost.y <= exitY) {
+        ghost.inHouse = false;
+        ghost.mode = scatterMode ? GHOST_MODE.SCATTER : GHOST_MODE.CHASE;
+        ghost.y = exitY;
+        ghost.lastDecisionTile = { x: -1, y: -1 }; // Reset for fresh decisions
+      }
+    }
+    return;
+  }
 
   // Determine ghost mode
   if (ghost.eaten) {
@@ -1153,15 +1181,7 @@ function moveGhost(ghost, dt) {
 
   wrapPosition(ghost);
 
-  if (ghost.mode === GHOST_MODE.EXITING) {
-    const exitY = ghostHouseExit.y * tileSize;
-    if (ghost.y <= exitY) {
-      ghost.inHouse = false;
-      ghost.mode = scatterMode ? GHOST_MODE.SCATTER : GHOST_MODE.CHASE;
-      ghost.lastDecisionTile = { x: -1, y: -1 }; // Reset for fresh decisions
-    }
-  }
-
+  // Handle ghosts returning home after being eaten
   if (ghost.mode === GHOST_MODE.EATEN) {
     const homeX = ghostHouseCenter.x * tileSize + tileSize / 2;
     const homeY = ghostHouseCenter.y * tileSize + tileSize / 2;
