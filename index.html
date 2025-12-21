@@ -3,6 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self';" />
+  <meta name="description" content="Wack-Man: A two-player Pac-Man clone with neon synthwave aesthetics" />
   <title>Wack-Man: Neon Maze Showdown</title>
   <link rel="stylesheet" href="style.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -45,14 +47,14 @@
       </div>
     </div>
     <div class="actions">
-      <button id="start" class="btn-start">▶ START</button>
-      <button id="pause" class="btn-pause">⏸</button>
-      <button id="mode" class="btn-mode">2P</button>
-      <button id="mute" class="btn-mute">🔊</button>
+      <button id="start" class="btn-start" aria-label="Start game">▶ START</button>
+      <button id="pause" class="btn-pause" aria-label="Pause game">⏸</button>
+      <button id="mode" class="btn-mode single-player" aria-label="Toggle single or two player mode">1P</button>
+      <button id="mute" class="btn-mute" aria-label="Toggle sound on or off">🔊</button>
     </div>
   </div>
   <div class="canvas-wrap">
-    <canvas id="game" width="672" height="720"></canvas>
+    <canvas id="game" width="672" height="720" aria-label="Game canvas" role="application"></canvas>
   </div>
   <div class="footer">
     <span class="footer-text">Eat pellets • Power up • Eat ghosts • Get combos!</span>

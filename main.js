@@ -1,14 +1,70 @@
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 
-// ==================== CONFIGURATION ====================
+// ==================== GAME CONFIGURATION ====================
+// Board dimensions
 const tileSize = 24;
 const rows = 30;
 const cols = 28;
+
+// Speed configuration
 const baseSpeed = 125;
 const ghostSpeed = 110;
-const playerRadius = tileSize / 2 - 3; // Visual radius of player
-const collisionPadding = 2; // Extra padding to prevent wall clipping
+const SPEED_INCREASE_PER_LEVEL = 5;
+const GHOST_SPEED_INCREASE_PER_LEVEL = 4;
+const GHOST_EATEN_SPEED_MULTIPLIER = 2.5;
+const GHOST_FRIGHTENED_SPEED_MULTIPLIER = 0.5;
+
+// Player configuration
+const playerRadius = tileSize / 2 - 3;
+const collisionPadding = 2;
+const COLLISION_RADIUS_FACTOR = 1.5;
+const PLAYER_INVINCIBILITY_DURATION = 2;
+const PLAYER_TRAIL_LENGTH = 8;
+
+// Scoring configuration
+const PELLET_BASE_SCORE = 10;
+const POWER_PELLET_SCORE = 50;
+const GHOST_BASE_SCORE = 200;
+const MAX_COMBO_MULTIPLIER = 10;
+const COMBO_TIMER_DURATION = 0.5;
+const EXTRA_LIFE_FIRST_THRESHOLD = 10000;
+const EXTRA_LIFE_RECURRING_INTERVAL = 50000;
+
+// Frightened mode configuration
+const FRIGHTENED_BASE_DURATION = 8;
+const FRIGHTENED_DURATION_DECREASE_PER_LEVEL = 0.5;
+const FRIGHTENED_MIN_DURATION = 4;
+const FRIGHTENED_WARNING_TIME = 2;
+
+// Scatter/Chase mode timing
+const SCATTER_BASE_DURATION = 7;
+const SCATTER_MIN_DURATION = 3;
+const CHASE_BASE_DURATION = 20;
+const CHASE_DURATION_INCREASE_PER_LEVEL = 3;
+
+// State transition timers
+const READY_STATE_DURATION = 2.5;
+const DYING_STATE_DURATION = 1.5;
+const DEATH_ANIMATION_DURATION = 1;
+
+// Visual effects
+const SCREEN_SHAKE_DECAY_RATE = 5;
+const SCREEN_FLASH_DECAY_RATE = 3;
+
+// Fruit configuration
+const FRUIT_SPAWN_CHANCE = 0.002;
+const FRUIT_MAX_COUNT = 2;
+const FRUIT_MIN_TIME = 8;
+const FRUIT_MAX_TIME = 12;
+const FRUIT_BONUS_PER_LEVEL = 100;
+
+// Ghost AI configuration
+const GHOST_INTERSECTION_TOLERANCE = 2;
+const GHOST_EXIT_DELAY_MULTIPLIER = 1.5;
+
+// Wrap position edge tolerance
+const WRAP_POSITION_TOLERANCE = 0;
 
 // ==================== GAME STATE MACHINE ====================
 const GAME_STATE = {
@@ -23,18 +79,52 @@ const GAME_STATE = {
 let gameState = GAME_STATE.IDLE;
 let stateTimer = 0; // Timer for state transitions
 
+// ==================== LOCAL STORAGE HELPERS ====================
+/**
+ * Safely gets a value from localStorage with error handling
+ * @param {string} key - The localStorage key
+ * @param {*} defaultValue - Default value if retrieval fails
+ * @returns {*} The stored value or default
+ */
+function getLocalStorage(key, defaultValue) {
+  try {
+    const value = localStorage.getItem(key);
+    return value !== null ? parseInt(value, 10) : defaultValue;
+  } catch (e) {
+    console.warn(`Failed to read from localStorage: ${e.message}`);
+    return defaultValue;
+  }
+}
+
+/**
+ * Safely sets a value in localStorage with error handling
+ * @param {string} key - The localStorage key
+ * @param {*} value - The value to store
+ */
+function setLocalStorage(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch (e) {
+    console.warn(`Failed to write to localStorage: ${e.message}`);
+  }
+}
+
 // ==================== GAME STATE ====================
 let lastTime = 0;
 let lives = 3;
 let level = 1;
-let highScore = parseInt(localStorage.getItem('wackman-highscore')) || 0;
+let highScore = getLocalStorage('wackman-highscore', 0);
 let comboTimer = 0;
 let comboCount = 0;
 let screenShake = 0;
 let screenFlash = 0;
 let totalPellets = 0;
 
-// State transition helper
+/**
+ * Transitions game to a new state
+ * @param {string} newState - The new game state
+ * @param {number} timer - Optional timer for timed states
+ */
 function setState(newState, timer = 0) {
   gameState = newState;
   stateTimer = timer;
@@ -290,7 +380,7 @@ let scatterMode = true;
 let ghostMultiplier = 1;
 let musicMuted = false;
 let sirenSpeed = 1;
-let singlePlayerMode = false; // false = 2P mode, true = 1P mode
+let singlePlayerMode = true; // false = 2P mode, true = 1P mode
 
 // ==================== AUDIO SYSTEM ====================
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -298,6 +388,14 @@ let musicInterval;
 let sirenInterval;
 
 // ==================== ENTITY CREATION ====================
+/**
+ * Creates a player entity
+ * @param {number} col - Starting column position
+ * @param {number} row - Starting row position
+ * @param {string} color - Hex color code for the player
+ * @param {string[]} keys - Array of key codes for controls
+ * @returns {Object} Player object
+ */
 function createPlayer(col, row, color, keys) {
   return {
     x: col * tileSize + tileSize / 2,
@@ -314,6 +412,14 @@ function createPlayer(col, row, color, keys) {
   };
 }
 
+/**
+ * Creates a ghost entity with AI personality
+ * @param {number} col - Starting column position
+ * @param {number} row - Starting row position
+ * @param {string} color - Hex color code for the ghost
+ * @param {number} personality - AI personality type (0-3)
+ * @returns {Object} Ghost object
+ */
 function createGhost(col, row, color, personality) {
   return {
     x: col * tileSize + tileSize / 2,
@@ -325,7 +431,7 @@ function createGhost(col, row, color, personality) {
     home: { x: col, y: row },
     eaten: false,
     inHouse: true,
-    exitDelay: personality * 1.5,
+    exitDelay: personality * GHOST_EXIT_DELAY_MULTIPLIER,
     personality,
     mode: GHOST_MODE.EXITING,
     wobble: Math.random() * Math.PI * 2,
@@ -334,6 +440,9 @@ function createGhost(col, row, color, personality) {
 }
 
 // ==================== BOARD MANAGEMENT ====================
+/**
+ * Resets the game board, recreating all pellets and power pellets
+ */
 function resetBoard() {
   pellets.clear();
   powerPellets.clear();
@@ -530,7 +639,7 @@ function drawGhosts() {
     if (g.eaten) {
       ghostColor = 'rgba(158, 160, 255, 0.3)';
     } else if (frightenedTimer > 0 && !g.inHouse) {
-      if (frightenedTimer < 2 && Math.floor(Date.now() / 150) % 2) {
+      if (frightenedTimer < FRIGHTENED_WARNING_TIME && Math.floor(Date.now() / 150) % 2) {
         ghostColor = '#ffffff';
         eyeColor = '#ff0000';
       } else {
@@ -668,7 +777,7 @@ function drawUI() {
 
     ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
     ctx.fillRect(x, y, barWidth, barHeight);
-    ctx.fillStyle = frightenedTimer < 2 ? '#ff0000' : '#2121de';
+    ctx.fillStyle = frightenedTimer < FRIGHTENED_WARNING_TIME ? '#ff0000' : '#2121de';
     ctx.fillRect(x, y, barWidth * progress, barHeight);
   }
 
@@ -756,9 +865,17 @@ function getMaxMoveDistance(x, y, dirX, dirY, speed, radius) {
   return lo;
 }
 
+/**
+ * Wraps entity position around screen edges (tunnel effect)
+ * @param {Object} entity - Entity with x, y coordinates
+ */
 function wrapPosition(entity) {
-  if (entity.x < 0) entity.x = canvas.width + entity.x;
-  if (entity.x > canvas.width) entity.x = entity.x - canvas.width;
+  if (entity.x < -WRAP_POSITION_TOLERANCE) {
+    entity.x = canvas.width + entity.x;
+  }
+  if (entity.x >= canvas.width + WRAP_POSITION_TOLERANCE) {
+    entity.x = entity.x - canvas.width;
+  }
 }
 
 function tryTurn(player) {
@@ -780,7 +897,7 @@ function movePlayer(player, dt) {
   if (player.invincible > 0) player.invincible -= dt;
 
   tryTurn(player);
-  const speed = baseSpeed + (level - 1) * 5;
+  const speed = baseSpeed + (level - 1) * SPEED_INCREASE_PER_LEVEL;
 
   // Calculate tile center for snapping
   const tileCenterX = Math.floor(player.x / tileSize) * tileSize + tileSize / 2;
@@ -811,7 +928,7 @@ function movePlayer(player, dt) {
     // Update trail
     if (player.dir.x !== 0 || player.dir.y !== 0) {
       player.trail.push({ x: player.x, y: player.y });
-      if (player.trail.length > 8) player.trail.shift();
+      if (player.trail.length > PLAYER_TRAIL_LENGTH) player.trail.shift();
     }
     player.x = nextX;
     player.y = nextY;
@@ -833,6 +950,12 @@ function movePlayer(player, dt) {
   eatFruit(player);
 }
 
+/**
+ * Calculates target position for ghost AI based on personality
+ * @param {Object} ghost - The ghost entity
+ * @param {Object[]} players - Array of player entities
+ * @returns {Object|null} Target position with x, y coordinates or null
+ */
 function getGhostTarget(ghost, players) {
   const personality = ghost.personality;
   const alivePlayers = players.filter(p => p.alive);
@@ -872,16 +995,44 @@ function getGhostTarget(ghost, players) {
 }
 
 function moveGhost(ghost, dt) {
+  // While waiting to exit, bob up and down
   if (ghost.exitDelay > 0) {
     ghost.exitDelay -= dt;
     ghost.y = ghost.startY + Math.sin(Date.now() / 200) * 3;
     return;
   }
 
-  const currentSpeed = ghost.eaten ? ghostSpeed * 2.5 :
-                       (frightenedTimer > 0 && !ghost.inHouse ? ghostSpeed * 0.5 :
-                        ghostSpeed + (level - 1) * 4);
+  const currentSpeed = ghost.eaten ? ghostSpeed * GHOST_EATEN_SPEED_MULTIPLIER :
+                       (frightenedTimer > 0 && !ghost.inHouse ? ghostSpeed * GHOST_FRIGHTENED_SPEED_MULTIPLIER :
+                        ghostSpeed + (level - 1) * GHOST_SPEED_INCREASE_PER_LEVEL);
   const speed = currentSpeed * dt;
+
+  // Special simple movement for ghosts exiting the house
+  // Move directly to exit position without complex pathfinding
+  if (ghost.inHouse && ghost.mode === GHOST_MODE.EXITING) {
+    const exitX = ghostHouseExit.x * tileSize + tileSize / 2;
+    const exitY = ghostHouseExit.y * tileSize + tileSize / 2;
+
+    // First, move horizontally to align with exit
+    if (Math.abs(ghost.x - exitX) > 2) {
+      ghost.dir = ghost.x < exitX ? { x: 1, y: 0 } : { x: -1, y: 0 };
+      ghost.x += ghost.dir.x * speed;
+    } else {
+      // Then move upward to exit
+      ghost.x = exitX; // Snap to center
+      ghost.dir = { x: 0, y: -1 };
+      ghost.y += ghost.dir.y * speed;
+
+      // Check if ghost has exited
+      if (ghost.y <= exitY) {
+        ghost.inHouse = false;
+        ghost.mode = scatterMode ? GHOST_MODE.SCATTER : GHOST_MODE.CHASE;
+        ghost.y = exitY;
+        ghost.lastDecisionTile = { x: -1, y: -1 }; // Reset for fresh decisions
+      }
+    }
+    return;
+  }
 
   // Determine ghost mode
   if (ghost.eaten) {
@@ -941,7 +1092,7 @@ function moveGhost(ghost, dt) {
 
   // Only make direction decisions at tile centers (intersections) in NEW tiles
   // Use a tolerance that scales with per-frame movement to avoid skipping intersections
-  const intersectionTolerance = Math.max(2, speed * 2);
+  const intersectionTolerance = Math.max(GHOST_INTERSECTION_TOLERANCE, speed * 2);
   const atIntersection = distToCenter <= intersectionTolerance && isNewTile;
 
   const isExitingOrEaten = ghost.mode === GHOST_MODE.EXITING || ghost.mode === GHOST_MODE.EATEN;
@@ -1030,15 +1181,7 @@ function moveGhost(ghost, dt) {
 
   wrapPosition(ghost);
 
-  if (ghost.mode === GHOST_MODE.EXITING) {
-    const exitY = ghostHouseExit.y * tileSize;
-    if (ghost.y <= exitY) {
-      ghost.inHouse = false;
-      ghost.mode = scatterMode ? GHOST_MODE.SCATTER : GHOST_MODE.CHASE;
-      ghost.lastDecisionTile = { x: -1, y: -1 }; // Reset for fresh decisions
-    }
-  }
-
+  // Handle ghosts returning home after being eaten
   if (ghost.mode === GHOST_MODE.EATEN) {
     const homeX = ghostHouseCenter.x * tileSize + tileSize / 2;
     const homeY = ghostHouseCenter.y * tileSize + tileSize / 2;
@@ -1056,8 +1199,14 @@ function moveGhost(ghost, dt) {
   }
 }
 
+/**
+ * Checks if two entities are colliding
+ * @param {Object} a - First entity with x, y coordinates
+ * @param {Object} b - Second entity with x, y coordinates
+ * @returns {boolean} True if entities are colliding
+ */
 function collide(a, b) {
-  return Math.hypot(a.x - b.x, a.y - b.y) < tileSize / 1.5;
+  return Math.hypot(a.x - b.x, a.y - b.y) < tileSize / COLLISION_RADIUS_FACTOR;
 }
 
 // ==================== GAME LOGIC ====================
@@ -1066,10 +1215,10 @@ function eatPellet(player) {
 
   if (pellets.delete(key)) {
     // Combo system
-    comboTimer = 0.5;
+    comboTimer = COMBO_TIMER_DURATION;
     comboCount++;
-    const comboBonus = Math.min(comboCount, 10);
-    const points = 10 + comboBonus;
+    const comboBonus = Math.min(comboCount, MAX_COMBO_MULTIPLIER);
+    const points = PELLET_BASE_SCORE + comboBonus;
 
     addScore(player, points);
     createParticle(player.x, player.y, '#f6d646', 'pellet');
@@ -1080,9 +1229,12 @@ function eatPellet(player) {
   }
 
   if (powerPellets.delete(key)) {
-    frightenedTimer = Math.max(8 - level * 0.5, 4);
+    frightenedTimer = Math.max(
+      FRIGHTENED_BASE_DURATION - level * FRIGHTENED_DURATION_DECREASE_PER_LEVEL,
+      FRIGHTENED_MIN_DURATION
+    );
     ghostMultiplier = 1;
-    addScore(player, 50);
+    addScore(player, POWER_PELLET_SCORE);
     createParticle(player.x, player.y, '#6ef5c6', 'ghost');
     playSound(150, 0.3, 0.25);
     screenFlash = 0.5;
@@ -1105,10 +1257,10 @@ function addScore(player, points) {
   const totalScore = players[0].score + players[1].score;
   const prevScore = totalScore - points;
 
-  // Extra life at 10000 first, then every 50000 after (10k, 60k, 110k, 160k...)
+  // Extra life at threshold, then recurring interval
   const getExtraLivesForScore = (score) => {
-    if (score < 10000) return 0;
-    return 1 + Math.floor((score - 10000) / 50000);
+    if (score < EXTRA_LIFE_FIRST_THRESHOLD) return 0;
+    return 1 + Math.floor((score - EXTRA_LIFE_FIRST_THRESHOLD) / EXTRA_LIFE_RECURRING_INTERVAL);
   };
 
   const prevLives = getExtraLivesForScore(prevScore);
@@ -1125,7 +1277,7 @@ function addScore(player, points) {
   // Update high score
   if (totalScore > highScore) {
     highScore = totalScore;
-    localStorage.setItem('wackman-highscore', highScore);
+    setLocalStorage('wackman-highscore', highScore);
   }
 
   updateHud();
@@ -1139,7 +1291,7 @@ function eatFruit(player) {
     const fruitInfo = fruitTypes[fruit.type % fruitTypes.length];
     fruitTimers.splice(idx, 1);
 
-    const points = fruitInfo.points + level * 100;
+    const points = fruitInfo.points + level * FRUIT_BONUS_PER_LEVEL;
     addScore(player, points);
     createParticle(player.x, player.y, fruitInfo.color, 'ghost');
     createScorePopup(player.x, player.y - 20, points, fruitInfo.color);
@@ -1162,14 +1314,14 @@ function nextLevel() {
   playSound(660, 0.2, 0.15);
   playSound(880, 0.3, 0.2);
 
-  // Transition to READY state with 2.5 second timer
-  setState(GAME_STATE.READY, 2.5);
+  // Transition to READY state
+  setState(GAME_STATE.READY, READY_STATE_DURATION);
 }
 
 function update(dt) {
   // Update screen effects
-  screenShake = Math.max(0, screenShake - dt * 5);
-  screenFlash = Math.max(0, screenFlash - dt * 3);
+  screenShake = Math.max(0, screenShake - dt * SCREEN_SHAKE_DECAY_RATE);
+  screenFlash = Math.max(0, screenFlash - dt * SCREEN_FLASH_DECAY_RATE);
 
   // Update combo timer
   if (comboTimer > 0) {
@@ -1209,7 +1361,7 @@ function update(dt) {
           showGameOver();
         } else {
           resetPositions();
-          setState(GAME_STATE.READY, 1.5);
+          setState(GAME_STATE.READY, DYING_STATE_DURATION);
         }
       }
       return;
@@ -1226,8 +1378,8 @@ function update(dt) {
 
   // Toggle scatter/chase mode
   scatterTimer += dt;
-  const scatterDuration = Math.max(7 - level, 3);
-  const chaseDuration = 20 + level * 3;
+  const scatterDuration = Math.max(SCATTER_BASE_DURATION - level, SCATTER_MIN_DURATION);
+  const chaseDuration = CHASE_BASE_DURATION + level * CHASE_DURATION_INCREASE_PER_LEVEL;
   const cycleDuration = scatterDuration + chaseDuration;
   const cyclePos = scatterTimer % cycleDuration;
   scatterMode = cyclePos < scatterDuration;
@@ -1243,7 +1395,7 @@ function update(dt) {
   }
 
   // Spawn fruit
-  if (Math.random() < 0.002 && fruitTimers.length < 2) {
+  if (Math.random() < FRUIT_SPAWN_CHANCE && fruitTimers.length < FRUIT_MAX_COUNT) {
     spawnFruit();
   }
 }
@@ -1256,7 +1408,7 @@ function checkCollisions() {
       if (collide(g, p)) {
         if (frightenedTimer > 0) {
           g.eaten = true;
-          const points = 200 * ghostMultiplier;
+          const points = GHOST_BASE_SCORE * ghostMultiplier;
           addScore(p, points);
           createParticle(g.x, g.y, g.color, 'ghost');
           createScorePopup(g.x, g.y - 20, points, '#fff');
@@ -1279,7 +1431,7 @@ function loseLife(deadPlayer) {
 
   // Death effects
   deadPlayer.alive = false;
-  deadPlayer.deathTimer = 1;
+  deadPlayer.deathTimer = DEATH_ANIMATION_DURATION;
   createParticle(deadPlayer.x, deadPlayer.y, deadPlayer.color, 'death');
 
   playSound(200, 0.3, 0.3);
@@ -1288,7 +1440,7 @@ function loseLife(deadPlayer) {
 
   // Transition to DYING state - the state machine will handle
   // transitioning to GAMEOVER or READY after the timer expires
-  setState(GAME_STATE.DYING, 1.5);
+  setState(GAME_STATE.DYING, DYING_STATE_DURATION);
 }
 
 function resetPositions() {
@@ -1300,7 +1452,7 @@ function resetPositions() {
   players[1] = { ...createPlayer(p2Col, playerStartRow, '#6ef5c6', ['KeyW', 'KeyA', 'KeyS', 'KeyD']), score: players[1].score };
 
   // Only set invincibility for active players
-  getActivePlayers().forEach(p => p.invincible = 2);
+  getActivePlayers().forEach(p => p.invincible = PLAYER_INVINCIBILITY_DURATION);
 
   ghosts.forEach((g, idx) => {
     const colors = ['#ff4b8b', '#53a4ff', '#ff8c42', '#b967ff'];
@@ -1354,7 +1506,8 @@ function spawnFruit() {
   if (emptyTiles.length) {
     const choice = emptyTiles[Math.floor(Math.random() * emptyTiles.length)];
     const fruitType = Math.min(level - 1, fruitTypes.length - 1);
-    fruitTimers.push({ ...choice, time: 8 + Math.random() * 4, type: fruitType });
+    const fruitTime = FRUIT_MIN_TIME + Math.random() * (FRUIT_MAX_TIME - FRUIT_MIN_TIME);
+    fruitTimers.push({ ...choice, time: fruitTime, type: fruitType });
   }
 }
 
@@ -1373,6 +1526,9 @@ function loop(timestamp) {
   requestAnimationFrame(loop);
 }
 
+/**
+ * Updates the HUD display with current game stats
+ */
 function updateHud() {
   document.getElementById('p1-score').textContent = players[0].score;
   document.getElementById('p2-score').textContent = players[1].score;
@@ -1384,27 +1540,44 @@ function updateHud() {
 }
 
 // ==================== AUDIO ====================
+/**
+ * Plays a sound effect using Web Audio API
+ * @param {number} frequency - Sound frequency in Hz
+ * @param {number} duration - Duration in seconds
+ * @param {number} gain - Volume (0-1)
+ */
 function playSound(frequency, duration = 0.1, gain = 0.15) {
   if (musicMuted) return;
   try {
     const now = audioCtx.currentTime;
     const oscillator = audioCtx.createOscillator();
-    const g = audioCtx.createGain();
+    const gainNode = audioCtx.createGain();
     oscillator.frequency.value = frequency;
     oscillator.type = 'square';
-    g.gain.setValueAtTime(gain, now);
-    g.gain.exponentialRampToValueAtTime(0.001, now + duration);
-    oscillator.connect(g).connect(audioCtx.destination);
+    gainNode.gain.setValueAtTime(gain, now);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration);
+    oscillator.connect(gainNode).connect(audioCtx.destination);
     oscillator.start(now);
     oscillator.stop(now + duration + 0.05);
-  } catch (e) {}
+  } catch (e) {
+    console.warn(`Failed to play sound: ${e.message}`);
+  }
 }
 
+/**
+ * Starts playing background music melody
+ */
 function playMusic() {
   if (musicMuted) return;
+
+  // Always clear existing interval to prevent duplicates
+  if (musicInterval) {
+    clearInterval(musicInterval);
+    musicInterval = null;
+  }
+
   const melody = [392, 440, 494, 523, 494, 440, 392, 330];
   let idx = 0;
-  clearInterval(musicInterval);
   musicInterval = setInterval(() => {
     if (musicMuted || gameState !== GAME_STATE.PLAYING) return;
     playSound(melody[idx % melody.length], 0.15, 0.04);
@@ -1412,9 +1585,18 @@ function playMusic() {
   }, 250);
 }
 
+/**
+ * Starts playing ambient siren sound
+ */
 function playSiren() {
   if (musicMuted) return;
-  clearInterval(sirenInterval);
+
+  // Always clear existing interval to prevent duplicates
+  if (sirenInterval) {
+    clearInterval(sirenInterval);
+    sirenInterval = null;
+  }
+
   sirenInterval = setInterval(() => {
     if (musicMuted || gameState !== GAME_STATE.PLAYING || frightenedTimer > 0) return;
     const freq = 100 + Math.sin(Date.now() / (500 / sirenSpeed)) * 50;
@@ -1422,14 +1604,49 @@ function playSiren() {
   }, 150);
 }
 
+/**
+ * Stops all audio intervals
+ */
+function stopAudio() {
+  if (musicInterval) {
+    clearInterval(musicInterval);
+    musicInterval = null;
+  }
+  if (sirenInterval) {
+    clearInterval(sirenInterval);
+    sirenInterval = null;
+  }
+}
+
 // ==================== INPUT HANDLING ====================
+/**
+ * Consolidated keyboard input handler
+ * Handles both movement and game control keys
+ */
 window.addEventListener('keydown', (e) => {
+  // Prevent default for arrow keys and space
+  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
+    e.preventDefault();
+  }
+
+  // Handle pause toggle with Escape key
+  if (e.code === 'Escape') {
+    if (gameState === GAME_STATE.PLAYING) {
+      setState(GAME_STATE.PAUSED);
+      updatePauseButton();
+    } else if (gameState === GAME_STATE.PAUSED) {
+      setState(GAME_STATE.PLAYING);
+      updatePauseButton();
+    }
+    return;
+  }
+
+  // Handle movement keys
   const dir = directions[e.code];
   if (!dir) return;
 
   players.forEach((p, idx) => {
     // In single-player mode, both arrow keys and WASD control P1
-    const isP1Key = players[0].keys.includes(e.code);
     const isP2Key = players[1].keys.includes(e.code);
     const shouldControl = p.keys.includes(e.code) ||
       (singlePlayerMode && idx === 0 && isP2Key);
@@ -1443,22 +1660,19 @@ window.addEventListener('keydown', (e) => {
         startGame();
       } else if (gameState === GAME_STATE.PAUSED && lives > 0) {
         setState(GAME_STATE.PLAYING);
+        updatePauseButton();
       }
     }
   });
 });
 
-window.addEventListener('keydown', (e) => {
-  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
-    e.preventDefault();
-  }
-
-  // Toggle pause with Escape key
-  if (e.code === 'Escape' && gameState === GAME_STATE.PLAYING) {
+// ==================== VISIBILITY CHANGE HANDLER ====================
+/**
+ * Auto-pause game when tab is hidden to prevent unfair deaths
+ */
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && gameState === GAME_STATE.PLAYING) {
     setState(GAME_STATE.PAUSED);
-    updatePauseButton();
-  } else if (e.code === 'Escape' && gameState === GAME_STATE.PAUSED) {
-    setState(GAME_STATE.PLAYING);
     updatePauseButton();
   }
 });
@@ -1505,8 +1719,8 @@ canvas.addEventListener('touchend', (e) => {
 
 // ==================== GAME INITIALIZATION ====================
 function startGame() {
-  // Start game with READY state and 2.5 second countdown
-  setState(GAME_STATE.READY, 2.5);
+  // Start game with READY state countdown
+  setState(GAME_STATE.READY, READY_STATE_DURATION);
 
   if (audioCtx.state === 'suspended') audioCtx.resume();
   if (!musicMuted) {
@@ -1545,8 +1759,7 @@ document.getElementById('mute').addEventListener('click', () => {
   musicMuted = !musicMuted;
   document.getElementById('mute').textContent = musicMuted ? '🔇' : '🔊';
   if (musicMuted) {
-    clearInterval(musicInterval);
-    clearInterval(sirenInterval);
+    stopAudio();
   } else {
     playMusic();
     playSiren();

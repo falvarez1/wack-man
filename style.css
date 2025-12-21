@@ -499,3 +499,34 @@ button:active {
     opacity: 0.9;
   }
 }
+
+/* Focus indicators for accessibility */
+button:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 4px;
+}
+
+canvas:focus-visible {
+  outline: 3px solid var(--accent-2);
+  outline-offset: 4px;
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  body::before {
+    animation: none;
+  }
+
+  .title {
+    animation: none;
+    text-shadow: 0 0 10px rgba(246, 214, 70, 0.8), 0 2px 0 #b8860b;
+  }
+}
