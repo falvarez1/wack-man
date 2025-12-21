@@ -2550,16 +2550,22 @@ document.getElementById('start').addEventListener('click', () => {
   }
 });
 
-document.getElementById('mute').addEventListener('click', () => {
-  musicMuted = !musicMuted;
-  document.getElementById('mute').textContent = musicMuted ? '🔇' : '🔊';
-  if (musicMuted) {
-    stopAudio();
-  } else {
-    playMusic();
-    playSiren();
-  }
-});
+const muteButton = document.getElementById('mute');
+if (muteButton) {
+  muteButton.textContent = musicMuted ? '🔇' : '🔊';
+  muteButton.addEventListener('click', () => {
+    musicMuted = !musicMuted;
+    muteButton.textContent = musicMuted ? '🔇' : '🔊';
+    if (musicMuted) {
+      stopAudio();
+    } else {
+      playMusic();
+      playSiren();
+    }
+  });
+} else {
+  console.warn('Mute button not found; skipping mute toggle binding.');
+}
 
 // Pause button handler
 document.getElementById('pause').addEventListener('click', () => {
