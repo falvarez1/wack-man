@@ -77,7 +77,8 @@ const POWERUP_TYPES = {
   SPEED: { color: '#00ff88', name: 'Speed Boost', duration: 10 },
   FREEZE: { color: '#00d4ff', name: 'Freeze Ghosts', duration: 5 },
   SHIELD: { color: '#ff00ff', name: 'Shield', duration: 1 },
-  DOUBLE: { color: '#ffaa00', name: '2x Score', duration: 15 }
+  DOUBLE: { color: '#ffaa00', name: '2x Score', duration: 15 },
+  HANDS: { color: '#ffd700', name: 'WACKY HANDS!', duration: 6.5 }
 };
 
 // ==================== DIFFICULTY SYSTEM ====================
@@ -822,6 +823,47 @@ function drawPlayers() {
     ctx.beginPath();
     ctx.arc(2, -5, 2, 0, Math.PI * 2);
     ctx.fill();
+
+    // Wacky Hands power-up animation
+    if (isPowerUpActive('HANDS')) {
+      const isMoving = p.dir.x !== 0 || p.dir.y !== 0;
+      const baseSpeed = Math.sqrt(p.dir.x * p.dir.x + p.dir.y * p.dir.y);
+      const animSpeed = isMoving ? 120 - (baseSpeed * 20) : 150; // Faster animation when moving faster
+      const handWave = Math.sin(Date.now() / animSpeed) * 15; // Up/down 15px oscillation
+      const handOffset = tileSize / 2 + 5;
+
+      // Golden glow effect for hands
+      ctx.shadowColor = POWERUP_TYPES.HANDS.color;
+      ctx.shadowBlur = 10;
+
+      // Left hand
+      ctx.fillStyle = '#ffe4b5'; // Skin tone
+      ctx.beginPath();
+      ctx.ellipse(-handOffset, handWave, 8, 12, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Left hand details (thumb)
+      ctx.beginPath();
+      ctx.ellipse(-handOffset - 6, handWave, 3, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Right hand (opposite motion for running effect)
+      ctx.beginPath();
+      ctx.ellipse(handOffset, -handWave, 8, 12, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Right hand details (thumb)
+      ctx.beginPath();
+      ctx.ellipse(handOffset + 6, -handWave, 3, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Add sparkle particles occasionally
+      if (Math.random() < 0.1) {
+        const sparkleX = p.x + (Math.random() - 0.5) * 30;
+        const sparkleY = p.y + (Math.random() - 0.5) * 30;
+        createParticle(sparkleX, sparkleY, POWERUP_TYPES.HANDS.color, 'star');
+      }
+    }
 
     ctx.shadowBlur = 0;
     ctx.restore();
@@ -2007,6 +2049,16 @@ function checkCollisions() {
 
           // Trigger slow-motion effect
           slowMotionTimer = SLOWMO_DURATION;
+
+          // Activate WACKY HANDS after eating 3 ghosts in one power-up!
+          if (ghostsEatenThisPowerUp === 3 && !isPowerUpActive('HANDS')) {
+            activePowerUps.push({
+              type: 'HANDS',
+              duration: POWERUP_TYPES.HANDS.duration,
+              timeLeft: POWERUP_TYPES.HANDS.duration
+            });
+            createScorePopup(p.x, p.y - 40, 'WACKY HANDS!', POWERUP_TYPES.HANDS.color);
+          }
 
           // Enhanced ghost eating sound effect (like arcade)
           playGhostEatenSound();
