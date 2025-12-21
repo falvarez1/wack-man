@@ -503,25 +503,32 @@ button:active {
 /* Responsive Design */
 @media (max-width: 720px) {
   body {
-    padding: 12px 8px 20px;
+    padding: 8px 8px 14px;
   }
 
   .hud {
-    padding: 16px;
-    border-radius: 16px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    width: 100%;
+    max-width: 720px;
   }
 
   .title {
-    font-size: 20px;
+    font-size: 18px;
   }
 
   .subtitle {
-    font-size: 8px;
+    font-size: 7px;
+  }
+
+  .title-container {
+    margin-bottom: 10px;
   }
 
   .controls {
+    gap: 10px;
+    margin-bottom: 10px;
     font-size: 10px;
-    gap: 12px;
   }
 
   .control-tip {
@@ -530,9 +537,14 @@ button:active {
     opacity: 0.7;
   }
 
+  .stats {
+    gap: 10px;
+    margin: 8px 0;
+  }
+
   .stat-box {
-    padding: 10px 16px;
-    min-width: 75px;
+    padding: 8px 10px;
+    min-width: 76px;
   }
 
   .stat-value {
@@ -546,15 +558,44 @@ button:active {
   }
 
   .canvas-wrap {
-    padding: 10px;
-    border-radius: 16px;
+    margin-top: 12px;
+    padding: 12px;
+    border-radius: 14px;
     max-width: 100%;
     overflow: hidden;
   }
 
+  .actions {
+    gap: 10px;
+  }
+
   button {
-    padding: 12px 20px;
+    padding: 12px 14px;
     font-size: 11px;
+  }
+
+  .btn-start,
+  .btn-pause {
+    font-size: 14px;
+  }
+
+  .btn-mode,
+  .btn-difficulty {
+    font-size: 10px;
+    min-width: 60px;
+  }
+
+  .volume-control {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+
+  .volume-slider {
+    width: 150px;
+  }
+
+  .footer {
+    margin-top: 8px;
   }
 }
 
