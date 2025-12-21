@@ -2239,23 +2239,28 @@ function spawnFruit() {
 
 // ==================== GAME LOOP ====================
 function loop(timestamp) {
-  if (!lastTime) lastTime = timestamp;
-  let dt = Math.min((timestamp - lastTime) / 1000, 0.1);
-  lastTime = timestamp;
+  try {
+    if (!lastTime) lastTime = timestamp;
+    let dt = Math.min((timestamp - lastTime) / 1000, 0.1);
+    lastTime = timestamp;
 
-  // Apply slow-motion effect when eating ghosts
-  if (slowMotionTimer > 0) {
-    dt *= SLOWMO_FACTOR;
-    slowMotionTimer -= dt / SLOWMO_FACTOR; // Decrement in real time
+    // Apply slow-motion effect when eating ghosts
+    if (slowMotionTimer > 0) {
+      dt *= SLOWMO_FACTOR;
+      slowMotionTimer -= dt / SLOWMO_FACTOR; // Decrement in real time
+    }
+
+    update(dt);
+    drawGrid();
+    drawPlayers();
+    drawGhosts();
+    drawUI();
+  } catch (err) {
+    console.error('Game loop error', err);
+    setState(GAME_STATE.PAUSED);
+  } finally {
+    requestAnimationFrame(loop);
   }
-
-  update(dt);
-  drawGrid();
-  drawPlayers();
-  drawGhosts();
-  drawUI();
-
-  requestAnimationFrame(loop);
 }
 
 /**
