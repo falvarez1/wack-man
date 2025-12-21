@@ -37,6 +37,10 @@ const FRIGHTENED_DURATION_DECREASE_PER_LEVEL = 0.5;
 const FRIGHTENED_MIN_DURATION = 4;
 const FRIGHTENED_WARNING_TIME = 2;
 
+// Slow-motion effect configuration
+const SLOWMO_DURATION = 0.6;
+const SLOWMO_FACTOR = 0.15;
+
 // Scatter/Chase mode timing
 const SCATTER_BASE_DURATION = 7;
 const SCATTER_MIN_DURATION = 3;
@@ -65,6 +69,51 @@ const GHOST_EXIT_DELAY_MULTIPLIER = 1.5;
 
 // Wrap position edge tolerance
 const WRAP_POSITION_TOLERANCE = 0;
+
+// Power-up configuration
+const POWERUP_SPAWN_CHANCE = 0.0008;
+const POWERUP_DURATION = 8;
+const POWERUP_TYPES = {
+  SPEED: { color: '#00ff88', name: 'Speed Boost', duration: 10 },
+  FREEZE: { color: '#00d4ff', name: 'Freeze Ghosts', duration: 5 },
+  SHIELD: { color: '#ff00ff', name: 'Shield', duration: 1 },
+  DOUBLE: { color: '#ffaa00', name: '2x Score', duration: 15 }
+};
+
+// ==================== DIFFICULTY SYSTEM ====================
+const DIFFICULTY = {
+  EASY: {
+    name: 'Easy',
+    ghostSpeedMultiplier: 0.8,
+    frightenedDuration: 10,
+    livesStart: 5,
+    scoreMultiplier: 0.8,
+    ghostExitDelay: 2.0
+  },
+  NORMAL: {
+    name: 'Normal',
+    ghostSpeedMultiplier: 1.0,
+    frightenedDuration: 8,
+    livesStart: 3,
+    scoreMultiplier: 1.0,
+    ghostExitDelay: 1.5
+  },
+  HARD: {
+    name: 'Hard',
+    ghostSpeedMultiplier: 1.3,
+    frightenedDuration: 5,
+    livesStart: 2,
+    scoreMultiplier: 1.5,
+    ghostExitDelay: 1.0
+  }
+};
+
+// Game modes
+const GAME_MODE = {
+  CLASSIC: 'classic',
+  TIME_ATTACK: 'time_attack',
+  SURVIVAL: 'survival'
+};
 
 // ==================== GAME STATE MACHINE ====================
 const GAME_STATE = {
@@ -106,6 +155,35 @@ function setLocalStorage(key, value) {
     localStorage.setItem(key, value);
   } catch (e) {
     console.warn(`Failed to write to localStorage: ${e.message}`);
+  }
+}
+
+/**
+ * Gets JSON object from localStorage
+ * @param {string} key - The localStorage key
+ * @param {*} defaultValue - Default value if retrieval fails
+ * @returns {*} Parsed object or default
+ */
+function getLocalStorageJSON(key, defaultValue) {
+  try {
+    const value = localStorage.getItem(key);
+    return value !== null ? JSON.parse(value) : defaultValue;
+  } catch (e) {
+    console.warn(`Failed to read JSON from localStorage: ${e.message}`);
+    return defaultValue;
+  }
+}
+
+/**
+ * Sets JSON object in localStorage
+ * @param {string} key - The localStorage key
+ * @param {*} value - The value to store
+ */
+function setLocalStorageJSON(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (e) {
+    console.warn(`Failed to write JSON to localStorage: ${e.message}`);
   }
 }
 
@@ -159,6 +237,27 @@ function isPlayerActive(index) {
 // Ghost house configuration
 const ghostHouseExit = { x: 13, y: 11 };
 const ghostHouseCenter = { x: 13, y: 14 };
+
+// Ghost house bounds - defines the restricted area that only eaten ghosts can enter
+const ghostHouseBounds = {
+  minX: 11,
+  maxX: 15,
+  minY: 12,
+  maxY: 15
+};
+
+/**
+ * Checks if a tile position is inside the ghost house restricted area
+ * @param {number} tileX - Tile X coordinate
+ * @param {number} tileY - Tile Y coordinate
+ * @returns {boolean} True if inside ghost house
+ */
+function isInsideGhostHouse(tileX, tileY) {
+  return tileX >= ghostHouseBounds.minX &&
+         tileX <= ghostHouseBounds.maxX &&
+         tileY >= ghostHouseBounds.minY &&
+         tileY <= ghostHouseBounds.maxY;
+}
 
 // ==================== STATIC MAZE CACHE ====================
 // Pre-rendered canvas for static maze elements (walls)
@@ -381,6 +480,59 @@ let ghostMultiplier = 1;
 let musicMuted = false;
 let sirenSpeed = 1;
 let singlePlayerMode = true; // false = 2P mode, true = 1P mode
+let slowMotionTimer = 0;
+
+// ==================== GAME SETTINGS ====================
+let currentDifficulty = 'NORMAL';
+let currentGameMode = GAME_MODE.CLASSIC;
+let masterVolume = 0.5; // 0-1
+
+// ==================== STATISTICS TRACKING ====================
+let stats = getLocalStorageJSON('wackman-stats', {
+  gamesPlayed: 0,
+  totalGhostsEaten: 0,
+  totalPelletsEaten: 0,
+  totalDeaths: 0,
+  highestLevel: 0,
+  longestCombo: 0,
+  totalPlayTime: 0,
+  totalScore: 0,
+  perfectLevels: 0,
+  powerUpsCollected: 0
+});
+
+let sessionStats = {
+  ghostsEaten: 0,
+  pelletsEaten: 0,
+  deaths: 0,
+  startTime: Date.now(),
+  perfectLevel: true
+};
+
+// ==================== ACHIEVEMENTS ====================
+const ACHIEVEMENTS = {
+  FIRST_BLOOD: { id: 'first_blood', name: 'First Blood', desc: 'Eat your first ghost', icon: '👻' },
+  COMBO_MASTER: { id: 'combo_master', name: 'Combo Master', desc: 'Achieve a 20+ pellet combo', icon: '🔥' },
+  CENTURION: { id: 'centurion', name: 'Centurion', desc: 'Eat 100 ghosts', icon: '💯' },
+  LEVEL_10: { id: 'level_10', name: 'Expert', desc: 'Reach level 10', icon: '⭐' },
+  PERFECT: { id: 'perfect', name: 'Perfection', desc: 'Complete a level without dying', icon: '✨' },
+  SPEED_DEMON: { id: 'speed_demon', name: 'Speed Demon', desc: 'Collect a speed power-up', icon: '⚡' },
+  UNTOUCHABLE: { id: 'untouchable', name: 'Untouchable', desc: 'Complete 3 perfect levels in a row', icon: '🛡️' },
+  HIGH_ROLLER: { id: 'high_roller', name: 'High Roller', desc: 'Score 50,000 points', icon: '💎' },
+  SURVIVOR: { id: 'survivor', name: 'Survivor', desc: 'Survive for 10 minutes', icon: '⏱️' },
+  GHOST_HUNTER: { id: 'ghost_hunter', name: 'Ghost Hunter', desc: 'Eat 4 ghosts in one power-up', icon: '🏹' }
+};
+
+let unlockedAchievements = getLocalStorageJSON('wackman-achievements', []);
+
+// ==================== LEADERBOARD ====================
+let leaderboard = getLocalStorageJSON('wackman-leaderboard', []);
+
+// ==================== POWER-UPS ====================
+const activePowerUps = [];
+const powerUpSpawns = [];
+let consecutivePerfectLevels = 0;
+let ghostsEatenThisPowerUp = 0;
 
 // ==================== AUDIO SYSTEM ====================
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -548,6 +700,46 @@ function drawGrid() {
     ctx.shadowBlur = 0;
   });
 
+  // Draw power-ups
+  powerUpSpawns.forEach((powerUp) => {
+    const { x, y, type } = powerUp;
+    const powerUpInfo = POWERUP_TYPES[type];
+    const pulse = Math.sin(Date.now() / 150) * 0.3 + 1;
+    const rotation = Date.now() / 500;
+
+    ctx.save();
+    ctx.translate(x * tileSize + tileSize / 2, y * tileSize + tileSize / 2);
+    ctx.rotate(rotation);
+
+    // Draw star shape for power-up
+    ctx.fillStyle = powerUpInfo.color;
+    ctx.shadowColor = powerUpInfo.color;
+    ctx.shadowBlur = 15 * pulse;
+
+    ctx.beginPath();
+    for (let i = 0; i < 5; i++) {
+      const angle = (Math.PI * 2 * i) / 5 - Math.PI / 2;
+      const outerRadius = 10 * pulse;
+      const innerRadius = 5 * pulse;
+      const outerX = Math.cos(angle) * outerRadius;
+      const outerY = Math.sin(angle) * outerRadius;
+      const innerAngle = angle + Math.PI / 5;
+      const innerX = Math.cos(innerAngle) * innerRadius;
+      const innerY = Math.sin(innerAngle) * innerRadius;
+
+      if (i === 0) {
+        ctx.moveTo(outerX, outerY);
+      } else {
+        ctx.lineTo(outerX, outerY);
+      }
+      ctx.lineTo(innerX, innerY);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  });
+
   ctx.restore();
 }
 
@@ -590,6 +782,21 @@ function drawPlayers() {
 
     ctx.save();
     ctx.translate(p.x, p.y);
+
+    // Shield power-up visual effect
+    if (isPowerUpActive('SHIELD')) {
+      const shieldPulse = Math.sin(Date.now() / 100) * 0.2 + 0.8;
+      ctx.strokeStyle = POWERUP_TYPES.SHIELD.color;
+      ctx.shadowColor = POWERUP_TYPES.SHIELD.color;
+      ctx.shadowBlur = 20 * shieldPulse;
+      ctx.lineWidth = 3;
+      ctx.globalAlpha = 0.6 * shieldPulse;
+      ctx.beginPath();
+      ctx.arc(0, 0, (tileSize / 2 + 8) * shieldPulse, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.shadowBlur = 0;
+    }
 
     // Invincibility flash
     if (p.invincible > 0 && Math.floor(Date.now() / 100) % 2) {
@@ -636,8 +843,16 @@ function drawGhosts() {
     let eyeColor = '#fff';
     let pupilColor = '#111';
 
+    // Freeze power-up visual
+    const isFrozen = isPowerUpActive('FREEZE') && !g.eaten;
+
     if (g.eaten) {
       ghostColor = 'rgba(158, 160, 255, 0.3)';
+    } else if (isFrozen) {
+      // Frozen ghosts are icy blue
+      ghostColor = POWERUP_TYPES.FREEZE.color;
+      eyeColor = '#ffffff';
+      pupilColor = '#00d4ff';
     } else if (frightenedTimer > 0 && !g.inHouse) {
       if (frightenedTimer < FRIGHTENED_WARNING_TIME && Math.floor(Date.now() / 150) % 2) {
         ghostColor = '#ffffff';
@@ -689,8 +904,35 @@ function drawGhosts() {
     ctx.arc(5 + pupilOffsetX, -3 + pupilOffsetY, 2.5, 0, Math.PI * 2);
     ctx.fill();
 
+    // Ice crystals for frozen ghosts
+    if (isFrozen) {
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.5;
+      ctx.shadowColor = '#00d4ff';
+      ctx.shadowBlur = 8;
+
+      // Draw ice crystals
+      for (let i = 0; i < 3; i++) {
+        const crystalX = -8 + i * 8;
+        const crystalY = -10 + (i % 2) * 5;
+        const size = 4;
+
+        ctx.beginPath();
+        ctx.moveTo(crystalX, crystalY - size);
+        ctx.lineTo(crystalX, crystalY + size);
+        ctx.moveTo(crystalX - size, crystalY);
+        ctx.lineTo(crystalX + size, crystalY);
+        ctx.moveTo(crystalX - size * 0.7, crystalY - size * 0.7);
+        ctx.lineTo(crystalX + size * 0.7, crystalY + size * 0.7);
+        ctx.moveTo(crystalX - size * 0.7, crystalY + size * 0.7);
+        ctx.lineTo(crystalX + size * 0.7, crystalY - size * 0.7);
+        ctx.stroke();
+      }
+      ctx.shadowBlur = 0;
+    }
+
     // Scared mouth when frightened
-    if (frightenedTimer > 0 && !g.eaten && !g.inHouse) {
+    if (frightenedTimer > 0 && !g.eaten && !g.inHouse && !isFrozen) {
       ctx.strokeStyle = eyeColor;
       ctx.lineWidth = 2;
       ctx.beginPath();
@@ -781,6 +1023,37 @@ function drawUI() {
     ctx.fillRect(x, y, barWidth * progress, barHeight);
   }
 
+  // Active power-ups display
+  if (activePowerUps.length > 0) {
+    const powerUpY = 50;
+    let powerUpX = canvas.width / 2 - (activePowerUps.length * 60) / 2;
+
+    ctx.font = '8px "Press Start 2P", monospace';
+    ctx.textAlign = 'center';
+
+    activePowerUps.forEach((powerUp) => {
+      const powerUpInfo = POWERUP_TYPES[powerUp.type];
+      const timeLeft = Math.ceil(powerUp.timeLeft);
+
+      // Power-up icon background
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      ctx.fillRect(powerUpX - 25, powerUpY - 5, 50, 30);
+
+      // Power-up name
+      ctx.fillStyle = powerUpInfo.color;
+      ctx.shadowColor = powerUpInfo.color;
+      ctx.shadowBlur = 10;
+      ctx.fillText(powerUp.type.substring(0, 3), powerUpX, powerUpY + 6);
+
+      // Time remaining
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#fff';
+      ctx.fillText(`${timeLeft}s`, powerUpX, powerUpY + 18);
+
+      powerUpX += 60;
+    });
+  }
+
   // Draw particles and popups
   drawParticles();
 }
@@ -802,6 +1075,12 @@ function isPassable(nx, ny, isGhost = false, isExiting = false) {
   if (cell === 'W') return false;
   if (cell === '-' && isGhost && isExiting) return true;
   if (cell === '-' && !isGhost) return false;
+
+  // Prevent ghosts from entering the ghost house area unless they're eaten/exiting
+  if (isGhost && !isExiting && isInsideGhostHouse(nx, ny)) {
+    return false;
+  }
+
   return true;
 }
 
@@ -897,7 +1176,10 @@ function movePlayer(player, dt) {
   if (player.invincible > 0) player.invincible -= dt;
 
   tryTurn(player);
-  const speed = baseSpeed + (level - 1) * SPEED_INCREASE_PER_LEVEL;
+
+  // Apply SPEED power-up
+  const speedMultiplier = isPowerUpActive('SPEED') ? 1.5 : 1.0;
+  const speed = (baseSpeed + (level - 1) * SPEED_INCREASE_PER_LEVEL) * speedMultiplier;
 
   // Calculate tile center for snapping
   const tileCenterX = Math.floor(player.x / tileSize) * tileSize + tileSize / 2;
@@ -948,6 +1230,7 @@ function movePlayer(player, dt) {
   wrapPosition(player);
   eatPellet(player);
   eatFruit(player);
+  collectPowerUp(player);
 }
 
 /**
@@ -995,6 +1278,11 @@ function getGhostTarget(ghost, players) {
 }
 
 function moveGhost(ghost, dt) {
+  // Freeze power-up stops all ghosts
+  if (isPowerUpActive('FREEZE') && !ghost.eaten) {
+    return;
+  }
+
   // While waiting to exit, bob up and down
   if (ghost.exitDelay > 0) {
     ghost.exitDelay -= dt;
@@ -1002,9 +1290,13 @@ function moveGhost(ghost, dt) {
     return;
   }
 
-  const currentSpeed = ghost.eaten ? ghostSpeed * GHOST_EATEN_SPEED_MULTIPLIER :
-                       (frightenedTimer > 0 && !ghost.inHouse ? ghostSpeed * GHOST_FRIGHTENED_SPEED_MULTIPLIER :
-                        ghostSpeed + (level - 1) * GHOST_SPEED_INCREASE_PER_LEVEL);
+  // Apply difficulty multiplier to ghost speed
+  const difficultySettings = DIFFICULTY[currentDifficulty];
+  const baseGhostSpeed = ghostSpeed * difficultySettings.ghostSpeedMultiplier;
+
+  const currentSpeed = ghost.eaten ? baseGhostSpeed * GHOST_EATEN_SPEED_MULTIPLIER :
+                       (frightenedTimer > 0 && !ghost.inHouse ? baseGhostSpeed * GHOST_FRIGHTENED_SPEED_MULTIPLIER :
+                        baseGhostSpeed + (level - 1) * GHOST_SPEED_INCREASE_PER_LEVEL);
   const speed = currentSpeed * dt;
 
   // Special simple movement for ghosts exiting the house
@@ -1030,6 +1322,43 @@ function moveGhost(ghost, dt) {
         ghost.y = exitY;
         ghost.lastDecisionTile = { x: -1, y: -1 }; // Reset for fresh decisions
       }
+    }
+    return;
+  }
+
+  // Special simple movement for eaten ghosts returning home
+  // Move directly to ghost house without pathfinding or wall collision
+  if (ghost.eaten && ghost.mode === GHOST_MODE.EATEN) {
+    const homeX = ghostHouseCenter.x * tileSize + tileSize / 2;
+    const homeY = ghostHouseCenter.y * tileSize + tileSize / 2;
+
+    // Calculate direct vector to home
+    const dx = homeX - ghost.x;
+    const dy = homeY - ghost.y;
+    const distance = Math.hypot(dx, dy);
+
+    // Move directly toward home (no pathfinding, no wall collision)
+    if (distance > speed) {
+      // Normalize direction and move
+      ghost.x += (dx / distance) * speed;
+      ghost.y += (dy / distance) * speed;
+
+      // Update direction for visual purposes
+      const angle = Math.atan2(dy, dx);
+      if (Math.abs(Math.cos(angle)) > Math.abs(Math.sin(angle))) {
+        ghost.dir = { x: Math.sign(dx), y: 0 };
+      } else {
+        ghost.dir = { x: 0, y: Math.sign(dy) };
+      }
+    } else {
+      // Reached home - reset ghost
+      ghost.x = homeX;
+      ghost.y = homeY;
+      ghost.eaten = false;
+      ghost.inHouse = true;
+      ghost.mode = GHOST_MODE.EXITING;
+      ghost.exitDelay = 0.5;
+      ghost.lastDecisionTile = { x: -1, y: -1 };
     }
     return;
   }
@@ -1180,23 +1509,6 @@ function moveGhost(ghost, dt) {
   }
 
   wrapPosition(ghost);
-
-  // Handle ghosts returning home after being eaten
-  if (ghost.mode === GHOST_MODE.EATEN) {
-    const homeX = ghostHouseCenter.x * tileSize + tileSize / 2;
-    const homeY = ghostHouseCenter.y * tileSize + tileSize / 2;
-    // Check if ghost has reached the ghost house area (more generous check)
-    if (ghost.y >= ghostHouseCenter.y * tileSize && Math.abs(ghost.x - homeX) < tileSize) {
-      ghost.eaten = false;
-      ghost.inHouse = true;
-      ghost.mode = GHOST_MODE.EXITING;
-      ghost.exitDelay = 0.5;
-      // Reset position and decision tracking
-      ghost.x = homeX;
-      ghost.y = homeY;
-      ghost.lastDecisionTile = { x: -1, y: -1 };
-    }
-  }
 }
 
 /**
@@ -1218,23 +1530,38 @@ function eatPellet(player) {
     comboTimer = COMBO_TIMER_DURATION;
     comboCount++;
     const comboBonus = Math.min(comboCount, MAX_COMBO_MULTIPLIER);
-    const points = PELLET_BASE_SCORE + comboBonus;
+
+    // Apply score multiplier from DOUBLE power-up
+    const scoreMultiplier = isPowerUpActive('DOUBLE') ? 2 : 1;
+    const points = (PELLET_BASE_SCORE + comboBonus) * scoreMultiplier;
 
     addScore(player, points);
     createParticle(player.x, player.y, '#f6d646', 'pellet');
     playSound(520 + comboCount * 20, 0.04, 0.08);
+
+    // Track statistics
+    stats.totalPelletsEaten++;
+    sessionStats.pelletsEaten++;
+    stats.totalScore += points;
 
     // Update siren speed based on remaining pellets
     sirenSpeed = 1 + (1 - pellets.size / totalPellets) * 0.5;
   }
 
   if (powerPellets.delete(key)) {
-    frightenedTimer = Math.max(
+    // Apply difficulty multiplier to frightened duration
+    const difficultySettings = DIFFICULTY[currentDifficulty];
+    const baseDuration = Math.max(
       FRIGHTENED_BASE_DURATION - level * FRIGHTENED_DURATION_DECREASE_PER_LEVEL,
       FRIGHTENED_MIN_DURATION
     );
+    frightenedTimer = baseDuration * (difficultySettings.frightenedDuration / FRIGHTENED_BASE_DURATION);
+
     ghostMultiplier = 1;
-    addScore(player, POWER_PELLET_SCORE);
+    ghostsEatenThisPowerUp = 0; // Reset for Ghost Hunter achievement
+
+    const scoreMultiplier = isPowerUpActive('DOUBLE') ? 2 : 1;
+    addScore(player, POWER_PELLET_SCORE * scoreMultiplier);
     createParticle(player.x, player.y, '#6ef5c6', 'ghost');
     playSound(150, 0.3, 0.25);
     screenFlash = 0.5;
@@ -1300,11 +1627,243 @@ function eatFruit(player) {
   }
 }
 
+/**
+ * Spawns a power-up at a random empty location
+ */
+function spawnPowerUp() {
+  const emptyTiles = [];
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      if (board[row][col] === 0 && Math.hypot(col - 14, row - 15) > 5) {
+        emptyTiles.push({ x: col, y: row });
+      }
+    }
+  }
+
+  if (emptyTiles.length === 0) return;
+
+  const choice = emptyTiles[Math.floor(Math.random() * emptyTiles.length)];
+  const powerUpKeys = Object.keys(POWERUP_TYPES);
+  const powerUpType = powerUpKeys[Math.floor(Math.random() * powerUpKeys.length)];
+  const powerUpTime = 10 + Math.random() * 10; // 10-20 seconds
+
+  powerUpSpawns.push({
+    x: choice.x,
+    y: choice.y,
+    time: powerUpTime,
+    type: powerUpType
+  });
+}
+
+/**
+ * Collects a power-up and activates its effect
+ * @param {Object} player - The player collecting the power-up
+ */
+function collectPowerUp(player) {
+  const key = `${Math.floor(player.x / tileSize)},${Math.floor(player.y / tileSize)}`;
+  const idx = powerUpSpawns.findIndex((p) => `${p.x},${p.y}` === key);
+
+  if (idx >= 0) {
+    const powerUp = powerUpSpawns[idx];
+    const powerUpInfo = POWERUP_TYPES[powerUp.type];
+    powerUpSpawns.splice(idx, 1);
+
+    // Add to active power-ups
+    activePowerUps.push({
+      type: powerUp.type,
+      duration: powerUpInfo.duration,
+      timeLeft: powerUpInfo.duration
+    });
+
+    // Update statistics
+    stats.powerUpsCollected++;
+    sessionStats.powerUpsCollected = (sessionStats.powerUpsCollected || 0) + 1;
+
+    // Check achievements
+    if (powerUp.type === 'SPEED') {
+      unlockAchievement('SPEED_DEMON');
+    }
+
+    // Visual feedback
+    createParticle(player.x, player.y, powerUpInfo.color, 'star');
+    createScorePopup(player.x, player.y - 20, powerUpInfo.name, powerUpInfo.color);
+    playSound(660, 0.2, 0.1);
+    playSound(880, 0.2, 0.1);
+    playSound(1100, 0.2, 0.1);
+
+    // Apply immediate effects
+    if (powerUp.type === 'FREEZE') {
+      // Freeze all ghosts for duration
+      playSound(220, 0.3, 0.3);
+    } else if (powerUp.type === 'SHIELD') {
+      // Give invincibility
+      player.invincible = powerUpInfo.duration;
+      playSound(1320, 0.3, 0.2);
+    }
+  }
+}
+
+/**
+ * Updates all active power-ups
+ * @param {number} dt - Delta time
+ */
+function updatePowerUps(dt) {
+  // Update power-up spawn timers
+  powerUpSpawns.forEach((p) => (p.time -= dt));
+  for (let i = powerUpSpawns.length - 1; i >= 0; i--) {
+    if (powerUpSpawns[i].time <= 0) {
+      powerUpSpawns.splice(i, 1);
+    }
+  }
+
+  // Update active power-ups
+  for (let i = activePowerUps.length - 1; i >= 0; i--) {
+    activePowerUps[i].timeLeft -= dt;
+    if (activePowerUps[i].timeLeft <= 0) {
+      activePowerUps.splice(i, 1);
+    }
+  }
+}
+
+/**
+ * Checks if a specific power-up is currently active
+ * @param {string} type - Power-up type to check
+ * @returns {boolean} True if active
+ */
+function isPowerUpActive(type) {
+  return activePowerUps.some(p => p.type === type);
+}
+
+/**
+ * Gets the remaining time for a power-up
+ * @param {string} type - Power-up type
+ * @returns {number} Time remaining in seconds
+ */
+function getPowerUpTimeLeft(type) {
+  const powerUp = activePowerUps.find(p => p.type === type);
+  return powerUp ? powerUp.timeLeft : 0;
+}
+
+/**
+ * Unlocks an achievement
+ * @param {string} achievementId - Achievement ID to unlock
+ */
+function unlockAchievement(achievementId) {
+  if (!unlockedAchievements.includes(achievementId)) {
+    unlockedAchievements.push(achievementId);
+    setLocalStorageJSON('wackman-achievements', unlockedAchievements);
+
+    // Show achievement notification
+    const achievement = Object.values(ACHIEVEMENTS).find(a => a.id === achievementId);
+    if (achievement) {
+      createScorePopup(canvas.width / 2, 100, `${achievement.icon} ${achievement.name}`, '#ffd700');
+      playSound(1760, 0.3, 0.15);
+      playSound(2200, 0.3, 0.15);
+    }
+  }
+}
+
+/**
+ * Checks and unlocks achievements based on current stats
+ */
+function checkAchievements() {
+  // First Blood - eat first ghost
+  if (stats.totalGhostsEaten >= 1) {
+    unlockAchievement('first_blood');
+  }
+
+  // Combo Master - 20+ combo
+  if (stats.longestCombo >= 20) {
+    unlockAchievement('combo_master');
+  }
+
+  // Centurion - 100 ghosts
+  if (stats.totalGhostsEaten >= 100) {
+    unlockAchievement('centurion');
+  }
+
+  // Expert - level 10
+  if (level >= 10) {
+    unlockAchievement('level_10');
+  }
+
+  // High Roller - 50k points
+  if (totalScore >= 50000) {
+    unlockAchievement('high_roller');
+  }
+
+  // Survivor - 10 minutes
+  const playTime = (Date.now() - sessionStats.startTime) / 1000 / 60;
+  if (playTime >= 10) {
+    unlockAchievement('survivor');
+  }
+
+  // Ghost Hunter - eat 4 ghosts in one power-up
+  if (ghostsEatenThisPowerUp >= 4) {
+    unlockAchievement('ghost_hunter');
+  }
+
+  // Untouchable - 3 perfect levels in a row
+  if (consecutivePerfectLevels >= 3) {
+    unlockAchievement('untouchable');
+  }
+}
+
+/**
+ * Saves current statistics to localStorage
+ */
+function saveStats() {
+  setLocalStorageJSON('wackman-stats', stats);
+}
+
+/**
+ * Updates the leaderboard with current score
+ */
+function updateLeaderboard() {
+  const entry = {
+    score: totalScore,
+    level: level,
+    difficulty: currentDifficulty,
+    gameMode: currentGameMode,
+    date: Date.now()
+  };
+
+  leaderboard.push(entry);
+  leaderboard.sort((a, b) => b.score - a.score);
+  leaderboard = leaderboard.slice(0, 10); // Keep top 10
+
+  setLocalStorageJSON('wackman-leaderboard', leaderboard);
+}
+
 function nextLevel() {
   level += 1;
+
+  // Track perfect level achievement
+  if (sessionStats.perfectLevel) {
+    stats.perfectLevels++;
+    consecutivePerfectLevels++;
+    unlockAchievement('perfect');
+  } else {
+    consecutivePerfectLevels = 0;
+  }
+
+  // Update highest level
+  if (level > stats.highestLevel) {
+    stats.highestLevel = level;
+  }
+
+  // Save stats
+  saveStats();
+  checkAchievements();
+
+  // Reset for next level
+  sessionStats.perfectLevel = true;
+
   resetBoard();
   resetPositions();
   fruitTimers.length = 0;
+  powerUpSpawns.length = 0;
+  activePowerUps.length = 0;
   particles.length = 0;
   scorePopups.length = 0;
   screenFlash = 1;
@@ -1388,6 +1947,9 @@ function update(dt) {
   ghosts.forEach((g) => moveGhost(g, dt));
   checkCollisions();
 
+  // Update power-ups
+  updatePowerUps(dt);
+
   // Update fruit timers
   fruitTimers.forEach((f) => (f.time -= dt));
   for (let i = fruitTimers.length - 1; i >= 0; i -= 1) {
@@ -1397,6 +1959,21 @@ function update(dt) {
   // Spawn fruit
   if (Math.random() < FRUIT_SPAWN_CHANCE && fruitTimers.length < FRUIT_MAX_COUNT) {
     spawnFruit();
+  }
+
+  // Spawn power-ups (less frequent than fruit)
+  if (Math.random() < 0.005 && powerUpSpawns.length < 2) {
+    spawnPowerUp();
+  }
+
+  // Update play time
+  const currentPlayTime = (Date.now() - sessionStats.startTime) / 1000;
+  stats.totalPlayTime = (stats.totalPlayTime || 0) + dt;
+
+  // Check achievements periodically
+  if (Math.random() < 0.01) {
+    checkAchievements();
+    saveStats();
   }
 }
 
@@ -1408,14 +1985,31 @@ function checkCollisions() {
       if (collide(g, p)) {
         if (frightenedTimer > 0) {
           g.eaten = true;
-          const points = GHOST_BASE_SCORE * ghostMultiplier;
+
+          // Apply score multiplier from DOUBLE power-up
+          const scoreMultiplier = isPowerUpActive('DOUBLE') ? 2 : 1;
+          const points = GHOST_BASE_SCORE * ghostMultiplier * scoreMultiplier;
+
           addScore(p, points);
           createParticle(g.x, g.y, g.color, 'ghost');
           createScorePopup(g.x, g.y - 20, points, '#fff');
           ghostMultiplier *= 2;
-          playSound(440, 0.15, 0.2);
-          playSound(660, 0.1, 0.15);
-          playSound(880, 0.1, 0.1);
+
+          // Track statistics
+          stats.totalGhostsEaten++;
+          sessionStats.ghostsEaten++;
+          ghostsEatenThisPowerUp++;
+
+          // Update longest combo
+          if (comboCount > stats.longestCombo) {
+            stats.longestCombo = comboCount;
+          }
+
+          // Trigger slow-motion effect
+          slowMotionTimer = SLOWMO_DURATION;
+
+          // Enhanced ghost eating sound effect (like arcade)
+          playGhostEatenSound();
         } else {
           loseLife(p);
         }
@@ -1428,6 +2022,12 @@ function loseLife(deadPlayer) {
   lives -= 1;
   updateHud();
   screenShake = 1;
+
+  // Track death statistics
+  stats.totalDeaths++;
+  sessionStats.deaths++;
+  sessionStats.perfectLevel = false;
+  consecutivePerfectLevels = 0;
 
   // Death effects
   deadPlayer.alive = false;
@@ -1467,31 +2067,105 @@ function resetPositions() {
 }
 
 function showGameOver() {
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+  // Update leaderboard and save stats
+  updateLeaderboard();
+  saveStats();
+  checkAchievements();
+
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.9)';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+  let yPos = 60;
+
+  // Title
   ctx.fillStyle = '#ff4b8b';
   ctx.shadowColor = '#ff4b8b';
   ctx.shadowBlur = 30;
-  ctx.font = '28px "Press Start 2P", monospace';
+  ctx.font = '24px "Press Start 2P", monospace';
   ctx.textAlign = 'center';
-  ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 40);
+  ctx.fillText('GAME OVER', canvas.width / 2, yPos);
+  yPos += 50;
 
+  // Score
   const totalScore = players[0].score + players[1].score;
   ctx.fillStyle = '#f6d646';
   ctx.shadowColor = '#f6d646';
   ctx.font = '16px "Press Start 2P", monospace';
-  ctx.fillText(`SCORE: ${totalScore}`, canvas.width / 2, canvas.height / 2 + 10);
+  ctx.fillText(`SCORE: ${totalScore}`, canvas.width / 2, yPos);
+  yPos += 30;
 
+  // Level reached
   ctx.fillStyle = '#6ef5c6';
   ctx.shadowColor = '#6ef5c6';
   ctx.font = '12px "Press Start 2P", monospace';
-  ctx.fillText(`HIGH SCORE: ${highScore}`, canvas.width / 2, canvas.height / 2 + 40);
+  ctx.fillText(`LEVEL: ${level}`, canvas.width / 2, yPos);
+  yPos += 35;
 
+  // Session Stats Header
+  ctx.fillStyle = '#b967ff';
+  ctx.shadowBlur = 15;
+  ctx.font = '10px "Press Start 2P", monospace';
+  ctx.fillText('SESSION STATS', canvas.width / 2, yPos);
+  yPos += 25;
+
+  // Session Stats
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = '#c5d4ff';
+  ctx.font = '9px "Press Start 2P", monospace';
+  ctx.fillText(`Ghosts: ${sessionStats.ghostsEaten}  Pellets: ${sessionStats.pelletsEaten}`, canvas.width / 2, yPos);
+  yPos += 20;
+
+  const playTime = Math.floor((Date.now() - sessionStats.startTime) / 1000);
+  const minutes = Math.floor(playTime / 60);
+  const seconds = playTime % 60;
+  ctx.fillText(`Time: ${minutes}:${seconds.toString().padStart(2, '0')}  Deaths: ${sessionStats.deaths}`, canvas.width / 2, yPos);
+  yPos += 35;
+
+  // Leaderboard Header
+  ctx.fillStyle = '#ff8c42';
+  ctx.shadowBlur = 15;
+  ctx.shadowColor = '#ff8c42';
+  ctx.font = '10px "Press Start 2P", monospace';
+  ctx.fillText('TOP 5 SCORES', canvas.width / 2, yPos);
+  yPos += 25;
+
+  // Leaderboard
+  ctx.shadowBlur = 0;
+  ctx.font = '8px "Press Start 2P", monospace';
+  ctx.textAlign = 'left';
+  const leftX = canvas.width / 2 - 140;
+
+  leaderboard.slice(0, 5).forEach((entry, i) => {
+    const isCurrentGame = entry.score === totalScore && entry.level === level && i === 0;
+    ctx.fillStyle = isCurrentGame ? '#ffd700' : '#aab2ff';
+
+    const rank = `${i + 1}.`;
+    const score = `${entry.score}`;
+    const levelText = `L${entry.level}`;
+
+    ctx.fillText(rank, leftX, yPos);
+    ctx.fillText(score, leftX + 30, yPos);
+    ctx.fillText(levelText, leftX + 180, yPos);
+    yPos += 18;
+  });
+
+  // Achievements count
+  yPos += 25;
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#ffd700';
+  ctx.shadowBlur = 15;
+  ctx.shadowColor = '#ffd700';
+  ctx.font = '9px "Press Start 2P", monospace';
+  const achievementCount = unlockedAchievements.length;
+  const totalAchievements = Object.keys(ACHIEVEMENTS).length;
+  ctx.fillText(`Achievements: ${achievementCount}/${totalAchievements}`, canvas.width / 2, yPos);
+
+  // Instructions
+  yPos += 35;
   ctx.fillStyle = '#c5d4ff';
   ctx.shadowBlur = 0;
-  ctx.font = '10px "Press Start 2P", monospace';
-  ctx.fillText('Press Start to play again', canvas.width / 2, canvas.height / 2 + 80);
+  ctx.font = '9px "Press Start 2P", monospace';
+  ctx.fillText('Press Start to play again', canvas.width / 2, yPos);
 }
 
 function spawnFruit() {
@@ -1514,8 +2188,14 @@ function spawnFruit() {
 // ==================== GAME LOOP ====================
 function loop(timestamp) {
   if (!lastTime) lastTime = timestamp;
-  const dt = Math.min((timestamp - lastTime) / 1000, 0.1);
+  let dt = Math.min((timestamp - lastTime) / 1000, 0.1);
   lastTime = timestamp;
+
+  // Apply slow-motion effect when eating ghosts
+  if (slowMotionTimer > 0) {
+    dt *= SLOWMO_FACTOR;
+    slowMotionTimer -= dt / SLOWMO_FACTOR; // Decrement in real time
+  }
 
   update(dt);
   drawGrid();
@@ -1554,13 +2234,52 @@ function playSound(frequency, duration = 0.1, gain = 0.15) {
     const gainNode = audioCtx.createGain();
     oscillator.frequency.value = frequency;
     oscillator.type = 'square';
-    gainNode.gain.setValueAtTime(gain, now);
+    // Apply master volume to gain
+    gainNode.gain.setValueAtTime(gain * masterVolume, now);
     gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration);
     oscillator.connect(gainNode).connect(audioCtx.destination);
     oscillator.start(now);
     oscillator.stop(now + duration + 0.05);
   } catch (e) {
     console.warn(`Failed to play sound: ${e.message}`);
+  }
+}
+
+/**
+ * Plays the ghost eaten sound effect (arcade-style rising pitch)
+ */
+function playGhostEatenSound() {
+  if (musicMuted) return;
+  try {
+    const now = audioCtx.currentTime;
+
+    // Create a series of rising tones like the original arcade game
+    const notes = [
+      { freq: 523, time: 0.00, duration: 0.08 },  // C5
+      { freq: 659, time: 0.08, duration: 0.08 },  // E5
+      { freq: 784, time: 0.16, duration: 0.08 },  // G5
+      { freq: 1047, time: 0.24, duration: 0.12 }, // C6
+    ];
+
+    notes.forEach(note => {
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+
+      oscillator.frequency.value = note.freq;
+      oscillator.type = 'sine'; // Sine wave for smoother arcade sound
+
+      const startTime = now + note.time;
+      const endTime = startTime + note.duration;
+
+      gainNode.gain.setValueAtTime(0.25 * masterVolume, startTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, endTime);
+
+      oscillator.connect(gainNode).connect(audioCtx.destination);
+      oscillator.start(startTime);
+      oscillator.stop(endTime + 0.01);
+    });
+  } catch (e) {
+    console.warn(`Failed to play ghost eaten sound: ${e.message}`);
   }
 }
 
@@ -1730,7 +2449,10 @@ function startGame() {
 }
 
 function resetGame() {
-  lives = 3;
+  // Apply difficulty settings
+  const difficultySettings = DIFFICULTY[currentDifficulty];
+  lives = difficultySettings.livesStart;
+
   level = 1;
   players[0].score = 0;
   players[1].score = 0;
@@ -1738,6 +2460,27 @@ function resetGame() {
   comboCount = 0;
   frightenedTimer = 0;
   ghostMultiplier = 1;
+  consecutivePerfectLevels = 0;
+  ghostsEatenThisPowerUp = 0;
+
+  // Reset session statistics
+  sessionStats = {
+    ghostsEaten: 0,
+    pelletsEaten: 0,
+    deaths: 0,
+    powerUpsCollected: 0,
+    startTime: Date.now(),
+    perfectLevel: true
+  };
+
+  // Increment games played
+  stats.gamesPlayed++;
+  saveStats();
+
+  // Clear power-ups
+  activePowerUps.length = 0;
+  powerUpSpawns.length = 0;
+
   resetBoard();
   resetPositions();
   updateHud();
@@ -1813,6 +2556,50 @@ document.getElementById('mode').addEventListener('click', () => {
     resetPositions();
   }
 });
+
+// Difficulty toggle button handler
+document.getElementById('difficulty').addEventListener('click', () => {
+  // Only allow difficulty change when not actively playing
+  if (gameState !== GAME_STATE.IDLE && gameState !== GAME_STATE.GAMEOVER) {
+    return;
+  }
+
+  // Cycle through difficulties: NORMAL -> HARD -> EASY -> NORMAL
+  const difficulties = ['NORMAL', 'HARD', 'EASY'];
+  const currentIndex = difficulties.indexOf(currentDifficulty);
+  const nextIndex = (currentIndex + 1) % difficulties.length;
+  currentDifficulty = difficulties[nextIndex];
+
+  // Update button text
+  const diffBtn = document.getElementById('difficulty');
+  diffBtn.textContent = currentDifficulty;
+
+  // Save to localStorage
+  setLocalStorage('wackman-difficulty', currentDifficulty);
+});
+
+// Volume slider handler
+const volumeSlider = document.getElementById('volume');
+const volumeValue = document.getElementById('volume-value');
+
+volumeSlider.addEventListener('input', (e) => {
+  masterVolume = parseInt(e.target.value) / 100;
+  volumeValue.textContent = `${e.target.value}%`;
+
+  // Save to localStorage
+  setLocalStorage('wackman-volume', masterVolume);
+});
+
+// Load saved volume on startup
+const savedVolume = getLocalStorage('wackman-volume', '0.5');
+masterVolume = parseFloat(savedVolume);
+volumeSlider.value = Math.round(masterVolume * 100);
+volumeValue.textContent = `${Math.round(masterVolume * 100)}%`;
+
+// Load saved difficulty on startup
+const savedDifficulty = getLocalStorage('wackman-difficulty', 'NORMAL');
+currentDifficulty = savedDifficulty;
+document.getElementById('difficulty').textContent = currentDifficulty;
 
 function updateModeDisplay() {
   // Hide/show P2 controls info
