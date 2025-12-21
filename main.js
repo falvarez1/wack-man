@@ -234,6 +234,27 @@ function isPlayerActive(index) {
 const ghostHouseExit = { x: 13, y: 11 };
 const ghostHouseCenter = { x: 13, y: 14 };
 
+// Ghost house bounds - defines the restricted area that only eaten ghosts can enter
+const ghostHouseBounds = {
+  minX: 11,
+  maxX: 15,
+  minY: 12,
+  maxY: 15
+};
+
+/**
+ * Checks if a tile position is inside the ghost house restricted area
+ * @param {number} tileX - Tile X coordinate
+ * @param {number} tileY - Tile Y coordinate
+ * @returns {boolean} True if inside ghost house
+ */
+function isInsideGhostHouse(tileX, tileY) {
+  return tileX >= ghostHouseBounds.minX &&
+         tileX <= ghostHouseBounds.maxX &&
+         tileY >= ghostHouseBounds.minY &&
+         tileY <= ghostHouseBounds.maxY;
+}
+
 // ==================== STATIC MAZE CACHE ====================
 // Pre-rendered canvas for static maze elements (walls)
 let mazeCache = null;
@@ -1049,6 +1070,12 @@ function isPassable(nx, ny, isGhost = false, isExiting = false) {
   if (cell === 'W') return false;
   if (cell === '-' && isGhost && isExiting) return true;
   if (cell === '-' && !isGhost) return false;
+
+  // Prevent ghosts from entering the ghost house area unless they're eaten/exiting
+  if (isGhost && !isExiting && isInsideGhostHouse(nx, ny)) {
+    return false;
+  }
+
   return true;
 }
 
