@@ -50,7 +50,12 @@
       <button id="start" class="btn-start" aria-label="Start game">▶ START</button>
       <button id="pause" class="btn-pause" aria-label="Pause game">⏸</button>
       <button id="mode" class="btn-mode single-player" aria-label="Toggle single or two player mode">1P</button>
-      <button id="mute" class="btn-mute" aria-label="Toggle sound on or off">🔊</button>
+      <button id="difficulty" class="btn-difficulty" aria-label="Change difficulty">NORMAL</button>
+    </div>
+    <div class="volume-control">
+      <label for="volume" class="volume-label">VOLUME</label>
+      <input type="range" id="volume" class="volume-slider" min="0" max="100" value="50" aria-label="Volume control">
+      <span id="volume-value" class="volume-value">50%</span>
     </div>
   </div>
   <div class="canvas-wrap">
