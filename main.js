@@ -128,7 +128,6 @@ const GAME_STATE = {
 
 let gameState = GAME_STATE.IDLE;
 let stateTimer = 0; // Timer for state transitions
-let wasAutoPaused = false; // Track if game was auto-paused by visibility change
 
 // ==================== LOCAL STORAGE HELPERS ====================
 /**
@@ -2413,11 +2412,9 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'Escape') {
     if (gameState === GAME_STATE.PLAYING) {
       setState(GAME_STATE.PAUSED);
-      wasAutoPaused = false; // Clear auto-pause flag for manual pause
       updatePauseButton();
     } else if (gameState === GAME_STATE.PAUSED) {
       setState(GAME_STATE.PLAYING);
-      wasAutoPaused = false; // Clear auto-pause flag when manually unpausing
       updatePauseButton();
     }
     return;
@@ -2442,7 +2439,6 @@ window.addEventListener('keydown', (e) => {
         startGame();
       } else if (gameState === GAME_STATE.PAUSED && lives > 0) {
         setState(GAME_STATE.PLAYING);
-        wasAutoPaused = false; // Clear auto-pause flag when manually unpausing
         updatePauseButton();
       }
     }
@@ -2452,23 +2448,11 @@ window.addEventListener('keydown', (e) => {
 // ==================== VISIBILITY CHANGE HANDLER ====================
 /**
  * Auto-pause game when tab is hidden to prevent unfair deaths
- * Auto-unpause when tab becomes visible again
  */
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) {
-    // Tab is hidden - auto-pause if playing
-    if (gameState === GAME_STATE.PLAYING) {
-      setState(GAME_STATE.PAUSED);
-      wasAutoPaused = true;
-      updatePauseButton();
-    }
-  } else {
-    // Tab is visible again - auto-unpause if it was auto-paused
-    if (gameState === GAME_STATE.PAUSED && wasAutoPaused) {
-      setState(GAME_STATE.PLAYING);
-      wasAutoPaused = false;
-      updatePauseButton();
-    }
+  if (document.hidden && gameState === GAME_STATE.PLAYING) {
+    setState(GAME_STATE.PAUSED);
+    updatePauseButton();
   }
 });
 
@@ -2485,7 +2469,6 @@ canvas.addEventListener('touchstart', (e) => {
     startGame();
   } else if (gameState === GAME_STATE.PAUSED && lives > 0) {
     setState(GAME_STATE.PLAYING);
-    wasAutoPaused = false; // Clear auto-pause flag when manually unpausing
   }
 }, { passive: false });
 
@@ -2572,7 +2555,6 @@ document.getElementById('start').addEventListener('click', () => {
     startGame();
   } else if (gameState === GAME_STATE.PAUSED) {
     setState(GAME_STATE.PLAYING);
-    wasAutoPaused = false; // Clear auto-pause flag when manually unpausing
   }
 });
 
@@ -2599,12 +2581,10 @@ document.getElementById('pause').addEventListener('click', () => {
 
   if (gameState === GAME_STATE.PLAYING) {
     setState(GAME_STATE.PAUSED);
-    wasAutoPaused = false; // Clear auto-pause flag for manual pause
     pauseBtn.textContent = '▶';
     pauseBtn.classList.add('is-paused');
   } else if (gameState === GAME_STATE.PAUSED) {
     setState(GAME_STATE.PLAYING);
-    wasAutoPaused = false; // Clear auto-pause flag when manually unpausing
     pauseBtn.textContent = '⏸';
     pauseBtn.classList.remove('is-paused');
   }
