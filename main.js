@@ -139,7 +139,15 @@ let stateTimer = 0; // Timer for state transitions
 function getLocalStorage(key, defaultValue) {
   try {
     const value = localStorage.getItem(key);
-    return value !== null ? parseInt(value, 10) : defaultValue;
+    if (value === null) return defaultValue;
+
+    // Preserve strings but safely parse numbers
+    if (typeof defaultValue === 'number') {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : defaultValue;
+    }
+
+    return value;
   } catch (e) {
     console.warn(`Failed to read from localStorage: ${e.message}`);
     return defaultValue;
@@ -207,6 +215,7 @@ let totalPellets = 0;
 function setState(newState, timer = 0) {
   gameState = newState;
   stateTimer = timer;
+  syncLayoutWithState();
 }
 
 function isPlaying() {
@@ -281,6 +290,11 @@ function queueToast(message, options = {}) {
     clearTimeout(timeout);
     dismissToast(toast);
   });
+function syncLayoutWithState() {
+  const hud = document.querySelector('.hud');
+  const isActive = gameState === GAME_STATE.PLAYING || gameState === GAME_STATE.READY || gameState === GAME_STATE.PAUSED;
+  document.body.classList.toggle('game-active', isActive);
+  if (hud) hud.classList.toggle('compact', isActive);
 }
 
 // Get the active players based on game mode
@@ -1391,7 +1405,7 @@ function moveGhost(ghost, dt) {
   }
 
   // Apply difficulty multiplier to ghost speed
-  const difficultySettings = DIFFICULTY[currentDifficulty];
+  const difficultySettings = DIFFICULTY[currentDifficulty] || DIFFICULTY.NORMAL;
   const baseGhostSpeed = ghostSpeed * difficultySettings.ghostSpeedMultiplier;
 
   const currentSpeed = ghost.eaten ? baseGhostSpeed * GHOST_EATEN_SPEED_MULTIPLIER :
@@ -1650,7 +1664,7 @@ function eatPellet(player) {
 
   if (powerPellets.delete(key)) {
     // Apply difficulty multiplier to frightened duration
-    const difficultySettings = DIFFICULTY[currentDifficulty];
+    const difficultySettings = DIFFICULTY[currentDifficulty] || DIFFICULTY.NORMAL;
     const baseDuration = Math.max(
       FRIGHTENED_BASE_DURATION - level * FRIGHTENED_DURATION_DECREASE_PER_LEVEL,
       FRIGHTENED_MIN_DURATION
@@ -2462,7 +2476,48 @@ function stopAudio() {
  * Consolidated keyboard input handler
  * Handles both movement and game control keys
  */
+const settingsModal = document.getElementById('settings-modal');
+const settingsBackdrop = document.getElementById('settings-backdrop');
+const settingsButton = document.getElementById('settings');
+const closeSettingsButton = document.getElementById('close-settings');
+
+function isSettingsOpen() {
+  return settingsModal && settingsModal.classList.contains('open');
+}
+
+function openSettings() {
+  if (!settingsModal || !settingsBackdrop) return;
+  settingsModal.classList.add('open');
+  settingsModal.setAttribute('aria-hidden', 'false');
+  settingsBackdrop.classList.add('open');
+  settingsBackdrop.setAttribute('aria-hidden', 'false');
+}
+
+function closeSettings() {
+  if (!settingsModal || !settingsBackdrop) return;
+  settingsModal.classList.remove('open');
+  settingsModal.setAttribute('aria-hidden', 'true');
+  settingsBackdrop.classList.remove('open');
+  settingsBackdrop.setAttribute('aria-hidden', 'true');
+}
+
+if (settingsButton && settingsModal && settingsBackdrop) {
+  settingsButton.addEventListener('click', openSettings);
+  settingsBackdrop.addEventListener('click', closeSettings);
+}
+
+if (closeSettingsButton) {
+  closeSettingsButton.addEventListener('click', closeSettings);
+}
+
 window.addEventListener('keydown', (e) => {
+  if (isSettingsOpen()) {
+    if (e.code === 'Escape') {
+      closeSettings();
+    }
+    return;
+  }
+
   // Prevent default for arrow keys and space
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
     e.preventDefault();
@@ -2571,7 +2626,7 @@ function startGame() {
 
 function resetGame() {
   // Apply difficulty settings
-  const difficultySettings = DIFFICULTY[currentDifficulty];
+  const difficultySettings = DIFFICULTY[currentDifficulty] || DIFFICULTY.NORMAL;
   lives = difficultySettings.livesStart;
 
   level = 1;
@@ -2725,7 +2780,10 @@ volumeValue.textContent = `${Math.round(masterVolume * 100)}%`;
 
 // Load saved difficulty on startup
 const savedDifficulty = getLocalStorage('wackman-difficulty', 'NORMAL');
-currentDifficulty = savedDifficulty;
+currentDifficulty = DIFFICULTY[savedDifficulty] ? savedDifficulty : 'NORMAL';
+if (!DIFFICULTY[savedDifficulty]) {
+  setLocalStorage('wackman-difficulty', currentDifficulty);
+}
 document.getElementById('difficulty').textContent = currentDifficulty;
 
 function updateModeDisplay() {
@@ -2747,4 +2805,5 @@ initMazeCache();
 resetBoard();
 updateHud();
 updateModeDisplay();
+syncLayoutWithState();
 requestAnimationFrame(loop);
