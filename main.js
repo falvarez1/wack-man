@@ -1674,13 +1674,13 @@ function eatFruit(player) {
  */
 function spawnPowerUp() {
   const emptyTiles = [];
-  for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < cols; col++) {
-      if (board[row][col] === 0 && Math.hypot(col - 14, row - 15) > 5) {
-        emptyTiles.push({ x: col, y: row });
+  layout.forEach((rowString, y) => {
+    [...rowString].forEach((cell, x) => {
+      if (isPassable(x, y, false, false) && !isInGhostHouse(x * tileSize, y * tileSize)) {
+        emptyTiles.push({ x, y });
       }
-    }
-  }
+    });
+  });
 
   if (emptyTiles.length === 0) return;
 
@@ -1809,6 +1809,8 @@ function unlockAchievement(achievementId) {
  * Checks and unlocks achievements based on current stats
  */
 function checkAchievements() {
+  const totalScore = players[0].score + players[1].score;
+
   // First Blood - eat first ghost
   if (stats.totalGhostsEaten >= 1) {
     unlockAchievement('first_blood');
@@ -1862,6 +1864,7 @@ function saveStats() {
  * Updates the leaderboard with current score
  */
 function updateLeaderboard() {
+  const totalScore = players[0].score + players[1].score;
   const entry = {
     score: totalScore,
     level: level,
@@ -2239,23 +2242,28 @@ function spawnFruit() {
 
 // ==================== GAME LOOP ====================
 function loop(timestamp) {
-  if (!lastTime) lastTime = timestamp;
-  let dt = Math.min((timestamp - lastTime) / 1000, 0.1);
-  lastTime = timestamp;
+  try {
+    if (!lastTime) lastTime = timestamp;
+    let dt = Math.min((timestamp - lastTime) / 1000, 0.1);
+    lastTime = timestamp;
 
-  // Apply slow-motion effect when eating ghosts
-  if (slowMotionTimer > 0) {
-    dt *= SLOWMO_FACTOR;
-    slowMotionTimer -= dt / SLOWMO_FACTOR; // Decrement in real time
+    // Apply slow-motion effect when eating ghosts
+    if (slowMotionTimer > 0) {
+      dt *= SLOWMO_FACTOR;
+      slowMotionTimer -= dt / SLOWMO_FACTOR; // Decrement in real time
+    }
+
+    update(dt);
+    drawGrid();
+    drawPlayers();
+    drawGhosts();
+    drawUI();
+  } catch (err) {
+    console.error('Game loop error', err);
+    setState(GAME_STATE.PAUSED);
+  } finally {
+    requestAnimationFrame(loop);
   }
-
-  update(dt);
-  drawGrid();
-  drawPlayers();
-  drawGhosts();
-  drawUI();
-
-  requestAnimationFrame(loop);
 }
 
 /**
@@ -2550,16 +2558,22 @@ document.getElementById('start').addEventListener('click', () => {
   }
 });
 
-document.getElementById('mute').addEventListener('click', () => {
-  musicMuted = !musicMuted;
-  document.getElementById('mute').textContent = musicMuted ? '🔇' : '🔊';
-  if (musicMuted) {
-    stopAudio();
-  } else {
-    playMusic();
-    playSiren();
-  }
-});
+const muteButton = document.getElementById('mute');
+if (muteButton) {
+  muteButton.textContent = musicMuted ? '🔇' : '🔊';
+  muteButton.addEventListener('click', () => {
+    musicMuted = !musicMuted;
+    muteButton.textContent = musicMuted ? '🔇' : '🔊';
+    if (musicMuted) {
+      stopAudio();
+    } else {
+      playMusic();
+      playSiren();
+    }
+  });
+} else {
+  console.warn('Mute button not found; skipping mute toggle binding.');
+}
 
 // Pause button handler
 document.getElementById('pause').addEventListener('click', () => {
