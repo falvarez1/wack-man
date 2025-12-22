@@ -55,7 +55,7 @@
       <button id="start" class="btn-start" aria-label="Start game">▶ START</button>
       <button id="pause" class="btn-pause" aria-label="Pause game">⏸</button>
       <button id="mode" class="btn-mode single-player" aria-label="Toggle single or two player mode">1P</button>
-      <button id="difficulty" class="btn-difficulty" aria-label="Change difficulty">NORMAL</button>
+      <button id="difficulty" class="btn-difficulty" aria-label="Change difficulty">ARCADE</button>
       <button id="settings" class="btn-settings" aria-label="Open settings">⚙️</button>
     </div>
   </div>
@@ -77,6 +77,36 @@
             <span id="volume-value" class="volume-value">50%</span>
             <button id="mute" class="btn-mute" aria-label="Toggle sound on or off">🔊</button>
           </div>
+        </div>
+        <div class="modal-section">
+          <div class="modal-section-title">Accessibility</div>
+          <label class="setting-row">
+            <span>
+              <span class="setting-title">Colorblind palette</span>
+              <span class="setting-help">High-contrast ghost colors</span>
+            </span>
+            <input type="checkbox" id="colorblind-toggle" aria-label="Toggle colorblind friendly palette">
+          </label>
+          <label class="setting-row">
+            <span>
+              <span class="setting-title">Swipe dead zone</span>
+              <span class="setting-help">Tune touch sensitivity</span>
+            </span>
+            <span class="setting-input">
+              <input type="range" id="swipe-deadzone" min="10" max="80" value="30" aria-label="Swipe dead zone">
+              <span id="swipe-deadzone-value" class="setting-value">30px</span>
+            </span>
+          </label>
+        </div>
+        <div class="modal-section">
+          <div class="modal-section-title">Practice</div>
+          <label class="setting-row">
+            <span>
+              <span class="setting-title">Slow mode</span>
+              <span class="setting-help">Ease ghost and player speed</span>
+            </span>
+            <input type="checkbox" id="slowmode-toggle" aria-label="Toggle slow practice mode">
+          </label>
         </div>
       </div>
     </div>
