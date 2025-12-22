@@ -75,7 +75,7 @@ body::before {
     linear-gradient(135deg, rgba(20, 20, 50, 0.9), rgba(10, 10, 30, 0.95));
   border: 2px solid rgba(110, 245, 198, 0.15);
   border-radius: 20px;
-  padding: 20px 24px;
+  padding: 14px 20px;
   box-shadow:
     0 20px 60px rgba(0, 0, 0, 0.5),
     0 0 40px rgba(110, 245, 198, 0.05),
@@ -97,7 +97,7 @@ body::before {
 
 .title-container {
   text-align: center;
-  margin-bottom: 16px;
+  margin-bottom: 10px;
 }
 
 .title {
@@ -130,7 +130,7 @@ body::before {
   justify-content: center;
   align-items: center;
   gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 10px;
   padding: 10px 20px;
   background: rgba(0, 0, 0, 0.3);
   border-radius: 10px;
@@ -149,54 +149,12 @@ body::before {
   text-shadow: 0 0 10px rgba(255, 93, 217, 0.5);
 }
 
-.controls {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 20px;
-  flex-wrap: wrap;
-  margin-bottom: 16px;
-  font-size: 11px;
-  color: #aab2ff;
-}
-
-.control-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.player-indicator {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  display: inline-block;
-}
-
-.player-indicator.p1 {
-  background: var(--accent);
-  box-shadow: 0 0 8px var(--accent);
-}
-
-.player-indicator.p2 {
-  background: var(--accent-2);
-  box-shadow: 0 0 8px var(--accent-2);
-}
-
-.control-tip {
-  font-size: 9px;
-  color: #666;
-  width: 100%;
-  text-align: center;
-  margin-top: 4px;
-}
-
 .stats {
   display: flex;
   justify-content: center;
   gap: 16px;
   flex-wrap: wrap;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .stat-box {
@@ -447,7 +405,7 @@ button:active {
 }
 
 .canvas-wrap {
-  margin-top: 20px;
+  margin-top: 10px;
   background:
     radial-gradient(circle at 20% 20%, rgba(246, 214, 70, 0.03), transparent 45%),
     radial-gradient(circle at 80% 0%, rgba(110, 245, 198, 0.05), transparent 40%),
@@ -523,18 +481,6 @@ button:active {
 
   .title-container {
     margin-bottom: 10px;
-  }
-
-  .controls {
-    gap: 10px;
-    margin-bottom: 10px;
-    font-size: 10px;
-  }
-
-  .control-tip {
-    display: block;
-    color: var(--accent-2);
-    opacity: 0.7;
   }
 
   .stats {
