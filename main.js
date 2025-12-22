@@ -55,6 +55,10 @@ const DEATH_ANIMATION_DURATION = 1;
 // Visual effects
 const SCREEN_SHAKE_DECAY_RATE = 5;
 const SCREEN_FLASH_DECAY_RATE = 3;
+const CRT_SCANLINE_SPACING = 3;
+const RETRO_PULSE_DECAY_RATE = 0.8;
+const CHROMA_DECAY_RATE = 0.9;
+const RETRO_SWEEP_SPEED = 140;
 
 // Fruit configuration
 const FRUIT_SPAWN_CHANCE = 0.002;
@@ -66,6 +70,7 @@ const FRUIT_BONUS_PER_LEVEL = 100;
 // Ghost AI configuration
 const GHOST_INTERSECTION_TOLERANCE = 2;
 const GHOST_EXIT_DELAY_MULTIPLIER = 1.5;
+const GHOST_RESPAWN_GRACE = 2.5;
 
 // Wrap position edge tolerance
 const WRAP_POSITION_TOLERANCE = 0;
@@ -205,7 +210,20 @@ let comboTimer = 0;
 let comboCount = 0;
 let screenShake = 0;
 let screenFlash = 0;
+let retroPulse = 0;
+let chromaJitter = 0;
+let scanlineOffset = 0;
 let totalPellets = 0;
+const reduceMotionQuery = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+let reduceMotion = reduceMotionQuery ? reduceMotionQuery.matches : false;
+reduceMotionQuery?.addEventListener('change', (event) => {
+  reduceMotion = event.matches;
+});
+if (reduceMotionQuery?.addListener && !reduceMotionQuery.addEventListener) {
+  reduceMotionQuery.addListener((event) => {
+    reduceMotion = event.matches;
+  });
+}
 
 /**
  * Transitions game to a new state
@@ -458,6 +476,111 @@ function drawParticles() {
   ctx.globalAlpha = 1;
 }
 
+// ==================== RETRO OVERLAY SYSTEM ====================
+function triggerRetroPulse(amount = 0.6) {
+  retroPulse = Math.min(1.6, retroPulse + amount);
+  chromaJitter = Math.min(1, chromaJitter + amount * 0.6);
+}
+
+function updateRetroEffects(dt) {
+  if (reduceMotion) {
+    retroPulse = 0;
+    chromaJitter = 0;
+    scanlineOffset = 0;
+    return;
+  }
+  retroPulse = Math.max(0, retroPulse - dt * RETRO_PULSE_DECAY_RATE);
+  chromaJitter = Math.max(0, chromaJitter - dt * CHROMA_DECAY_RATE);
+  scanlineOffset = (scanlineOffset + dt * 60) % CRT_SCANLINE_SPACING;
+}
+
+function drawRetroOverlay() {
+  ctx.save();
+
+  if (reduceMotion) {
+    ctx.globalCompositeOperation = 'screen';
+    const staticGlow = ctx.createRadialGradient(
+      canvas.width / 2, canvas.height / 2, tileSize,
+      canvas.width / 2, canvas.height / 2, Math.max(canvas.width, canvas.height) * 0.75
+    );
+    staticGlow.addColorStop(0, 'rgba(110, 245, 198, 0.06)');
+    staticGlow.addColorStop(1, 'rgba(3, 3, 10, 0.6)');
+    ctx.fillStyle = staticGlow;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.restore();
+    return;
+  }
+
+  const timeSource = typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
+  const time = timeSource / 1000;
+  const sweepX = ((time * RETRO_SWEEP_SPEED) % (canvas.width + 200)) - 200;
+
+  // Neon sweep
+  ctx.globalCompositeOperation = 'screen';
+  const sweep = ctx.createLinearGradient(sweepX, 0, sweepX + 200, canvas.height);
+  sweep.addColorStop(0, 'rgba(83, 164, 255, 0)');
+  sweep.addColorStop(0.5, 'rgba(255, 75, 139, 0.12)');
+  sweep.addColorStop(1, 'rgba(110, 245, 198, 0)');
+  ctx.globalAlpha = 0.08 + retroPulse * 0.08;
+  ctx.fillStyle = sweep;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Soft vignette/bloom
+  const vignette = ctx.createRadialGradient(
+    canvas.width / 2, canvas.height / 2, tileSize * 4,
+    canvas.width / 2, canvas.height / 2, Math.max(canvas.width, canvas.height) * 0.9
+  );
+  vignette.addColorStop(0, `rgba(246, 214, 70, ${0.06 + retroPulse * 0.08})`);
+  vignette.addColorStop(0.35, 'rgba(0, 0, 0, 0)');
+  vignette.addColorStop(1, 'rgba(0, 0, 0, 0.45)');
+  ctx.globalAlpha = 0.7;
+  ctx.fillStyle = vignette;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Scanlines
+  ctx.globalCompositeOperation = 'multiply';
+  ctx.globalAlpha = 0.14 + retroPulse * 0.1;
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
+  const offset = scanlineOffset % CRT_SCANLINE_SPACING;
+  for (let y = offset; y < canvas.height; y += CRT_SCANLINE_SPACING) {
+    ctx.fillRect(0, y, canvas.width, 1);
+  }
+
+  // Subtle neon gridlines
+  ctx.globalCompositeOperation = 'overlay';
+  ctx.globalAlpha = 0.08 + retroPulse * 0.05;
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(110, 245, 198, 0.25)';
+  for (let x = 0; x <= canvas.width; x += tileSize * 2) {
+    ctx.beginPath();
+    ctx.moveTo(x + Math.sin(time + x * 0.01) * 2, 0);
+    ctx.lineTo(x - Math.sin(time + x * 0.01) * 2, canvas.height);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = 'rgba(255, 93, 217, 0.18)';
+  for (let y = 0; y <= canvas.height; y += tileSize * 2) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(canvas.width, y + Math.cos(time + y * 0.01) * 2);
+    ctx.stroke();
+  }
+
+  // Chromatic edge glow
+  if (chromaJitter > 0) {
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.12 + chromaJitter * 0.3;
+    ctx.lineWidth = 2;
+
+    ctx.strokeStyle = 'rgba(255, 75, 139, 0.5)';
+    ctx.strokeRect(3 - chromaJitter * 2, 3, canvas.width - 6, canvas.height - 6);
+
+    ctx.strokeStyle = 'rgba(110, 245, 198, 0.4)';
+    ctx.strokeRect(3 + chromaJitter * 2, 3, canvas.width - 6, canvas.height - 6);
+  }
+
+  ctx.restore();
+}
+
 // ==================== LAYOUT ====================
 const layout = [
   'WWWWWWWWWWWWWWWWWWWWWWWWWWWW',
@@ -612,9 +735,16 @@ let consecutivePerfectLevels = 0;
 let ghostsEatenThisPowerUp = 0;
 
 // ==================== AUDIO SYSTEM ====================
+const MUSIC_STATE = {
+  NORMAL: 'normal',
+  FRIGHTENED: 'frightened',
+  GAMEOVER: 'gameover'
+};
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 let musicInterval;
 let sirenInterval;
+let frightenedInterval;
+let currentMusicState = null;
 
 // ==================== ENTITY CREATION ====================
 /**
@@ -665,6 +795,7 @@ function createGhost(col, row, color, personality) {
     mode: GHOST_MODE.EXITING,
     wobble: Math.random() * Math.PI * 2,
     lastDecisionTile: { x: -1, y: -1 }, // Track last tile where decision was made
+    respawnShield: 0,
   };
 }
 
@@ -1401,6 +1532,10 @@ function moveGhost(ghost, dt) {
     return;
   }
 
+  if (ghost.respawnShield > 0) {
+    ghost.respawnShield = Math.max(0, ghost.respawnShield - dt);
+  }
+
   // While waiting to exit, bob up and down
   if (ghost.exitDelay > 0) {
     ghost.exitDelay -= dt;
@@ -1438,6 +1573,7 @@ function moveGhost(ghost, dt) {
         ghost.inHouse = false;
         ghost.mode = scatterMode ? GHOST_MODE.SCATTER : GHOST_MODE.CHASE;
         ghost.y = exitY;
+        ghost.respawnShield = Math.max(ghost.respawnShield, GHOST_RESPAWN_GRACE);
         ghost.lastDecisionTile = { x: -1, y: -1 }; // Reset for fresh decisions
       }
     }
@@ -1477,6 +1613,7 @@ function moveGhost(ghost, dt) {
       ghost.mode = GHOST_MODE.EXITING;
       ghost.exitDelay = 0.5;
       ghost.lastDecisionTile = { x: -1, y: -1 };
+      ghost.respawnShield = GHOST_RESPAWN_GRACE;
     }
     return;
   }
@@ -1486,6 +1623,8 @@ function moveGhost(ghost, dt) {
     ghost.mode = GHOST_MODE.EATEN;
   } else if (ghost.inHouse) {
     ghost.mode = GHOST_MODE.EXITING;
+  } else if (ghost.respawnShield > 0) {
+    ghost.mode = scatterMode ? GHOST_MODE.SCATTER : GHOST_MODE.CHASE;
   } else if (frightenedTimer > 0) {
     ghost.mode = GHOST_MODE.FRIGHTENED;
   } else if (scatterMode) {
@@ -1683,6 +1822,7 @@ function eatPellet(player) {
     createParticle(player.x, player.y, '#6ef5c6', 'ghost');
     playSound(150, 0.3, 0.25);
     screenFlash = 0.5;
+    triggerRetroPulse(0.7);
 
     ghosts.forEach(g => {
       if (!g.inHouse && !g.eaten) {
@@ -1713,9 +1853,7 @@ function addScore(player, points) {
 
   if (newLives > prevLives) {
     lives += (newLives - prevLives);
-    playSound(880, 0.3, 0.2);
-    playSound(1100, 0.2, 0.2);
-    playSound(1320, 0.2, 0.2);
+    playExtraLifeJingle();
     screenFlash = 0.3;
   }
 
@@ -1809,6 +1947,7 @@ function collectPowerUp(player) {
     playSound(880, 0.2, 0.1);
     playSound(1100, 0.2, 0.1);
     queueToast(`${powerUpInfo.name} activated`, { accent: powerUpInfo.color, variant: 'strong' });
+    triggerRetroPulse(0.8);
 
     // Apply immediate effects
     if (powerUp.type === 'FREEZE') {
@@ -1989,6 +2128,7 @@ function nextLevel() {
   particles.length = 0;
   scorePopups.length = 0;
   screenFlash = 1;
+  triggerRetroPulse(1);
 
   playSound(440, 0.2, 0.15);
   playSound(550, 0.2, 0.15);
@@ -2001,9 +2141,12 @@ function nextLevel() {
 }
 
 function update(dt) {
+  refreshMusicState();
+
   // Update screen effects
   screenShake = Math.max(0, screenShake - dt * SCREEN_SHAKE_DECAY_RATE);
   screenFlash = Math.max(0, screenFlash - dt * SCREEN_FLASH_DECAY_RATE);
+  updateRetroEffects(dt);
 
   // Update combo timer
   if (comboTimer > 0) {
@@ -2041,6 +2184,7 @@ function update(dt) {
         if (lives <= 0) {
           setState(GAME_STATE.GAMEOVER);
           showGameOver();
+          setMusicState(MUSIC_STATE.GAMEOVER);
         } else {
           resetPositions();
           setState(GAME_STATE.READY, DYING_STATE_DURATION);
@@ -2117,6 +2261,7 @@ function checkCollisions() {
           createParticle(g.x, g.y, g.color, 'ghost');
           createScorePopup(g.x, g.y - 20, points, '#fff');
           ghostMultiplier *= 2;
+          triggerRetroPulse(0.45);
 
           // Track statistics
           stats.totalGhostsEaten++;
@@ -2336,6 +2481,7 @@ function loop(timestamp) {
     drawPlayers();
     drawGhosts();
     drawUI();
+    drawRetroOverlay();
   } catch (err) {
     console.error('Game loop error', err);
     setState(GAME_STATE.PAUSED);
@@ -2421,6 +2567,79 @@ function playGhostEatenSound() {
   }
 }
 
+function playReadyJingle() {
+  if (musicMuted) return;
+  const now = audioCtx.currentTime;
+  const notes = [
+    { freq: 523, duration: 0.12, time: 0 },
+    { freq: 659, duration: 0.12, time: 0.12 },
+    { freq: 784, duration: 0.14, time: 0.24 },
+    { freq: 1047, duration: 0.2, time: 0.38 },
+  ];
+  notes.forEach(note => {
+    const osc = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+    osc.type = 'square';
+    osc.frequency.value = note.freq;
+    const start = now + note.time;
+    const end = start + note.duration;
+    gainNode.gain.setValueAtTime(0.18 * masterVolume, start);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, end);
+    osc.connect(gainNode).connect(audioCtx.destination);
+    osc.start(start);
+    osc.stop(end + 0.02);
+  });
+}
+
+function playGameOverJingle() {
+  if (musicMuted) return;
+  const now = audioCtx.currentTime;
+  const notes = [
+    { freq: 784, duration: 0.22, time: 0 },
+    { freq: 740, duration: 0.22, time: 0.22 },
+    { freq: 698, duration: 0.22, time: 0.44 },
+    { freq: 659, duration: 0.22, time: 0.66 },
+    { freq: 622, duration: 0.28, time: 0.9 },
+    { freq: 587, duration: 0.35, time: 1.2 },
+  ];
+  notes.forEach(note => {
+    const osc = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+    osc.type = 'square';
+    osc.frequency.value = note.freq;
+    const start = now + note.time;
+    const end = start + note.duration;
+    gainNode.gain.setValueAtTime(0.22 * masterVolume, start);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, end);
+    osc.connect(gainNode).connect(audioCtx.destination);
+    osc.start(start);
+    osc.stop(end + 0.02);
+  });
+}
+
+function playExtraLifeJingle() {
+  if (musicMuted) return;
+  const now = audioCtx.currentTime;
+  const notes = [
+    { freq: 988, duration: 0.14, time: 0 },
+    { freq: 1175, duration: 0.14, time: 0.14 },
+    { freq: 1319, duration: 0.18, time: 0.28 },
+  ];
+  notes.forEach(note => {
+    const osc = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.value = note.freq;
+    const start = now + note.time;
+    const end = start + note.duration;
+    gainNode.gain.setValueAtTime(0.2 * masterVolume, start);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, end);
+    osc.connect(gainNode).connect(audioCtx.destination);
+    osc.start(start);
+    osc.stop(end + 0.02);
+  });
+}
+
 /**
  * Starts playing background music melody
  */
@@ -2440,6 +2659,25 @@ function playMusic() {
     playSound(melody[idx % melody.length], 0.15, 0.04);
     idx += 1;
   }, 250);
+}
+
+/**
+ * Starts playing frightened/safe ghost loop
+ */
+function playFrightenedTheme() {
+  if (musicMuted) return;
+  if (frightenedInterval) {
+    clearInterval(frightenedInterval);
+    frightenedInterval = null;
+  }
+
+  let toggle = false;
+  frightenedInterval = setInterval(() => {
+    if (musicMuted || gameState !== GAME_STATE.PLAYING || frightenedTimer <= 0) return;
+    const freq = toggle ? 329 : 294;
+    playSound(freq, 0.16, 0.05);
+    toggle = !toggle;
+  }, 220);
 }
 
 /**
@@ -2473,6 +2711,54 @@ function stopAudio() {
     clearInterval(sirenInterval);
     sirenInterval = null;
   }
+  if (frightenedInterval) {
+    clearInterval(frightenedInterval);
+    frightenedInterval = null;
+  }
+}
+
+function setMusicState(nextState) {
+  if (currentMusicState === nextState) return;
+  stopAudio();
+  currentMusicState = nextState;
+  if (musicMuted) return;
+
+  switch (nextState) {
+    case MUSIC_STATE.NORMAL:
+      playMusic();
+      playSiren();
+      break;
+    case MUSIC_STATE.FRIGHTENED:
+      playFrightenedTheme();
+      break;
+    case MUSIC_STATE.GAMEOVER:
+      playGameOverJingle();
+      break;
+    default:
+      break;
+  }
+}
+
+function refreshMusicState() {
+  if (musicMuted) {
+    stopAudio();
+    return;
+  }
+
+  if (gameState === GAME_STATE.GAMEOVER) {
+    setMusicState(MUSIC_STATE.GAMEOVER);
+    return;
+  }
+
+  if (gameState !== GAME_STATE.PLAYING && gameState !== GAME_STATE.READY) {
+    stopAudio();
+    currentMusicState = null;
+    return;
+  }
+
+  const frightenedActive = frightenedTimer > 0;
+  const targetState = frightenedActive ? MUSIC_STATE.FRIGHTENED : MUSIC_STATE.NORMAL;
+  setMusicState(targetState);
 }
 
 // ==================== INPUT HANDLING ====================
@@ -2620,12 +2906,10 @@ function startGame() {
   // Start game with READY state countdown
   setState(GAME_STATE.READY, READY_STATE_DURATION);
   queueToast(`Level ${level} ready`, { variant: 'strong' });
+  playReadyJingle();
 
   if (audioCtx.state === 'suspended') audioCtx.resume();
-  if (!musicMuted) {
-    playMusic();
-    playSiren();
-  }
+  setMusicState(MUSIC_STATE.NORMAL);
 }
 
 function resetGame() {
@@ -2687,8 +2971,7 @@ if (muteButton) {
     if (musicMuted) {
       stopAudio();
     } else {
-      playMusic();
-      playSiren();
+      refreshMusicState();
     }
   });
 } else {
