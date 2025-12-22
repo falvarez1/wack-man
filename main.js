@@ -46,6 +46,7 @@ const SCATTER_BASE_DURATION = 7;
 const SCATTER_MIN_DURATION = 3;
 const CHASE_BASE_DURATION = 20;
 const CHASE_DURATION_INCREASE_PER_LEVEL = 3;
+const LEVEL_COMPLETE_DURATION = 3;
 
 // State transition timers
 const READY_STATE_DURATION = 2.5;
@@ -86,26 +87,32 @@ const POWERUP_TYPES = {
   HANDS: { color: '#ffd700', name: 'WACKY HANDS!', duration: 6.5 }
 };
 
+// Accessibility presets
+const COLORBLIND_GHOST_COLORS = ['#ffb000', '#648fff', '#785ef0', '#dc267f'];
+const DEFAULT_GHOST_COLORS = ['#ff4b8b', '#53a4ff', '#ff8c42', '#b967ff'];
+const SLOW_MODE_SPEED_MULTIPLIER = 0.65;
+const DEFAULT_SWIPE_DEADZONE = 30;
+
 // ==================== DIFFICULTY SYSTEM ====================
 const DIFFICULTY = {
-  EASY: {
-    name: 'Easy',
+  CASUAL: {
+    name: 'Casual',
     ghostSpeedMultiplier: 0.8,
     frightenedDuration: 10,
     livesStart: 5,
     scoreMultiplier: 0.8,
     ghostExitDelay: 2.0
   },
-  NORMAL: {
-    name: 'Normal',
+  ARCADE: {
+    name: 'Arcade',
     ghostSpeedMultiplier: 1.0,
     frightenedDuration: 8,
     livesStart: 3,
     scoreMultiplier: 1.0,
     ghostExitDelay: 1.5
   },
-  HARD: {
-    name: 'Hard',
+  TURBO: {
+    name: 'Turbo',
     ghostSpeedMultiplier: 1.3,
     frightenedDuration: 5,
     livesStart: 2,
@@ -128,6 +135,7 @@ const GAME_STATE = {
   PLAYING: 'playing',     // Active gameplay
   PAUSED: 'paused',       // Game paused
   DYING: 'dying',         // Death animation playing
+  LEVEL_COMPLETE: 'level_complete', // End-of-level tally
   GAMEOVER: 'gameover'    // Game over screen
 };
 
@@ -224,6 +232,23 @@ if (reduceMotionQuery?.addListener && !reduceMotionQuery.addEventListener) {
     reduceMotion = event.matches;
   });
 }
+let colorblindMode = getLocalStorage('wackman-colorblind', 'false') === 'true';
+let slowModeEnabled = getLocalStorage('wackman-slowmode', 'false') === 'true';
+let swipeDeadZone = Number.parseInt(getLocalStorage('wackman-swipe-deadzone', DEFAULT_SWIPE_DEADZONE), 10);
+if (!Number.isFinite(swipeDeadZone) || swipeDeadZone < 10) swipeDeadZone = DEFAULT_SWIPE_DEADZONE;
+let scatterScript = [];
+let scatterPhaseIndex = 0;
+let scatterPhaseTimer = 0;
+let levelStats = {
+  pellets: 0,
+  ghosts: 0,
+  fruit: 0,
+  powerUps: 0,
+  livesLost: 0,
+  startedAt: Date.now(),
+  duration: 0
+};
+let lastLevelSummary = null;
 
 /**
  * Transitions game to a new state
@@ -315,8 +340,67 @@ function queueToast(message, options = {}) {
 }
 
 function syncLayoutWithState() {
-  const isActive = gameState === GAME_STATE.PLAYING || gameState === GAME_STATE.READY || gameState === GAME_STATE.PAUSED;
+  const isActive = gameState === GAME_STATE.PLAYING ||
+    gameState === GAME_STATE.READY ||
+    gameState === GAME_STATE.PAUSED ||
+    gameState === GAME_STATE.LEVEL_COMPLETE;
   document.body.classList.toggle('game-active', isActive);
+}
+
+function buildScatterChaseScript(currentLevel) {
+  if (currentLevel === 1) {
+    return [
+      { mode: 'scatter', duration: 7 },
+      { mode: 'chase', duration: 20 },
+      { mode: 'scatter', duration: 7 },
+      { mode: 'chase', duration: 20 },
+      { mode: 'scatter', duration: 5 },
+      { mode: 'chase', duration: 20 },
+      { mode: 'scatter', duration: 5 },
+      { mode: 'chase', duration: Infinity }
+    ];
+  }
+
+  if (currentLevel <= 4) {
+    return [
+      { mode: 'scatter', duration: 7 },
+      { mode: 'chase', duration: 20 },
+      { mode: 'scatter', duration: 7 },
+      { mode: 'chase', duration: 20 },
+      { mode: 'scatter', duration: 5 },
+      { mode: 'chase', duration: 20 },
+      { mode: 'scatter', duration: 1 },
+      { mode: 'chase', duration: Infinity }
+    ];
+  }
+
+  return [
+    { mode: 'scatter', duration: 5 },
+    { mode: 'chase', duration: 20 },
+    { mode: 'scatter', duration: 5 },
+    { mode: 'chase', duration: 20 },
+    { mode: 'scatter', duration: 5 },
+    { mode: 'chase', duration: 20 },
+    { mode: 'scatter', duration: 1 },
+    { mode: 'chase', duration: Infinity }
+  ];
+}
+
+function resetScatterChaseCycle() {
+  scatterScript = buildScatterChaseScript(level);
+  scatterPhaseIndex = 0;
+  scatterPhaseTimer = scatterScript[0]?.duration || Infinity;
+  scatterMode = scatterScript[0]?.mode === 'scatter';
+}
+
+function advanceScatterPhase() {
+  if (!scatterScript.length) return;
+  if (scatterPhaseTimer === Infinity) return;
+
+  scatterPhaseIndex = Math.min(scatterPhaseIndex + 1, scatterScript.length - 1);
+  const phase = scatterScript[scatterPhaseIndex];
+  scatterMode = phase.mode === 'scatter';
+  scatterPhaseTimer = phase.duration;
 }
 
 // Get the active players based on game mode
@@ -632,6 +716,17 @@ const pellets = new Set();
 const powerPellets = new Set();
 const fruitTimers = [];
 
+function getGhostPalette() {
+  return colorblindMode ? COLORBLIND_GHOST_COLORS : DEFAULT_GHOST_COLORS;
+}
+
+function applyGhostPalette() {
+  const palette = getGhostPalette();
+  ghosts?.forEach((g, idx) => {
+    g.color = palette[idx % palette.length];
+  });
+}
+
 // Ghost scatter corners
 const scatterTargets = [
   { x: cols - 3, y: 1 },
@@ -667,14 +762,14 @@ const GHOST_MODE = {
 
 // Four ghosts with unique personalities
 const ghosts = [
-  createGhost(13, 14, '#ff4b8b', 0), // Blinky - direct chaser (red/pink)
-  createGhost(12, 14, '#53a4ff', 1), // Inky - ambusher (blue)
-  createGhost(14, 14, '#ff8c42', 2), // Clyde - random/shy (orange)
-  createGhost(13, 13, '#b967ff', 3), // Pinky - targets ahead (purple)
+  createGhost(13, 14, getGhostPalette()[0], 0), // Blinky - direct chaser (red/pink)
+  createGhost(12, 14, getGhostPalette()[1], 1), // Inky - ambusher (blue)
+  createGhost(14, 14, getGhostPalette()[2], 2), // Clyde - random/shy (orange)
+  createGhost(13, 13, getGhostPalette()[3], 3), // Pinky - targets ahead (purple)
 ];
+applyGhostPalette();
 
 let frightenedTimer = 0;
-let scatterTimer = 0;
 let scatterMode = true;
 let ghostMultiplier = 1;
 let musicMuted = false;
@@ -683,7 +778,7 @@ let singlePlayerMode = true; // false = 2P mode, true = 1P mode
 let slowMotionTimer = 0;
 
 // ==================== GAME SETTINGS ====================
-let currentDifficulty = 'NORMAL';
+let currentDifficulty = 'ARCADE';
 let currentGameMode = GAME_MODE.CLASSIC;
 let masterVolume = 0.5; // 0-1
 
@@ -808,6 +903,15 @@ function resetBoard() {
   powerPellets.clear();
   fruitTimers.length = 0;
   totalPellets = 0;
+  levelStats = {
+    pellets: 0,
+    ghosts: 0,
+    fruit: 0,
+    powerUps: 0,
+    livesLost: 0,
+    startedAt: Date.now(),
+    duration: 0
+  };
 
   layout.forEach((row, y) => {
     [...row].forEach((cell, x) => {
@@ -1236,6 +1340,31 @@ function drawUI() {
     ctx.shadowBlur = 0;
   }
 
+  if (gameState === GAME_STATE.LEVEL_COMPLETE && lastLevelSummary) {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#6ef5c6';
+    ctx.shadowColor = '#6ef5c6';
+    ctx.shadowBlur = 18;
+    ctx.font = '22px "Press Start 2P", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(`LEVEL ${lastLevelSummary.level} CLEAR`, canvas.width / 2, canvas.height / 2 - 60);
+    ctx.shadowBlur = 0;
+
+    ctx.font = '10px "Press Start 2P", monospace';
+    const lines = [
+      `TIME ${lastLevelSummary.time.toFixed(1)}s`,
+      `PELLETS ${lastLevelSummary.pellets}`,
+      `GHOSTS ${lastLevelSummary.ghosts}`,
+      `FRUIT ${lastLevelSummary.fruit}`,
+      `POWER-UPS ${lastLevelSummary.powerUps}`,
+      `LIVES LOST ${lastLevelSummary.livesLost}`
+    ];
+    lines.forEach((line, idx) => {
+      ctx.fillText(line, canvas.width / 2, canvas.height / 2 - 20 + idx * 18);
+    });
+  }
+
   // Level indicator
   ctx.fillStyle = '#ff5dd9';
   ctx.font = '10px "Press Start 2P", monospace';
@@ -1428,7 +1557,8 @@ function movePlayer(player, dt) {
 
   // Apply SPEED power-up
   const speedMultiplier = isPowerUpActive('SPEED') ? 1.5 : 1.0;
-  const speed = (baseSpeed + (level - 1) * SPEED_INCREASE_PER_LEVEL) * speedMultiplier;
+  const slowmoMultiplier = slowModeEnabled ? SLOW_MODE_SPEED_MULTIPLIER : 1;
+  const speed = (baseSpeed + (level - 1) * SPEED_INCREASE_PER_LEVEL) * speedMultiplier * slowmoMultiplier;
 
   // Calculate tile center for snapping
   const tileCenterX = Math.floor(player.x / tileSize) * tileSize + tileSize / 2;
@@ -1502,28 +1632,109 @@ function getGhostTarget(ghost, players) {
 
   if (!target) return null;
 
+  const playerTile = {
+    x: Math.floor(target.x / tileSize),
+    y: Math.floor(target.y / tileSize)
+  };
+  const blinky = ghosts[0];
+  const blinkyTile = {
+    x: Math.floor(blinky.x / tileSize),
+    y: Math.floor(blinky.y / tileSize)
+  };
+
   switch (personality) {
     case 0: // Blinky - direct chase
-      return { x: target.x, y: target.y };
-    case 1: // Inky - ambush (target 4 tiles ahead)
-      return {
-        x: target.x + target.dir.x * tileSize * 4,
-        y: target.y + target.dir.y * tileSize * 4
+      return { x: playerTile.x * tileSize + tileSize / 2, y: playerTile.y * tileSize + tileSize / 2 };
+    case 1: { // Inky - vector from Blinky to a point two tiles ahead of player
+      let aheadTile = {
+        x: playerTile.x + target.dir.x * 2,
+        y: playerTile.y + target.dir.y * 2
       };
-    case 2: // Clyde - shy (scatter when close)
+      if (target.dir.y === -1) {
+        aheadTile = { x: aheadTile.x - 2, y: aheadTile.y - 2 };
+      }
+      const targetTile = {
+        x: aheadTile.x + (aheadTile.x - blinkyTile.x),
+        y: aheadTile.y + (aheadTile.y - blinkyTile.y)
+      };
+      return {
+        x: targetTile.x * tileSize + tileSize / 2,
+        y: targetTile.y * tileSize + tileSize / 2
+      };
+    }
+    case 2: { // Clyde - shy (scatter when close)
       const distToPlayer = Math.hypot(target.x - ghost.x, target.y - ghost.y);
       if (distToPlayer < tileSize * 8) {
         return scatterTargets[ghost.personality];
       }
-      return { x: target.x, y: target.y };
-    case 3: // Pinky - target 2 tiles ahead
-      return {
-        x: target.x + target.dir.x * tileSize * 2,
-        y: target.y + target.dir.y * tileSize * 2
+      return { x: playerTile.x * tileSize + tileSize / 2, y: playerTile.y * tileSize + tileSize / 2 };
+    }
+    case 3: { // Pinky - target 4 tiles ahead (with arcade overflow quirk when moving up)
+      let offset = { x: target.dir.x * 4, y: target.dir.y * 4 };
+      if (target.dir.y === -1) {
+        offset = { x: -4, y: -4 };
+      }
+      const targetTile = {
+        x: playerTile.x + offset.x,
+        y: playerTile.y + offset.y
       };
+      return {
+        x: targetTile.x * tileSize + tileSize / 2,
+        y: targetTile.y * tileSize + tileSize / 2
+      };
+    }
     default:
-      return { x: target.x, y: target.y };
+      return { x: playerTile.x * tileSize + tileSize / 2, y: playerTile.y * tileSize + tileSize / 2 };
   }
+}
+
+function getTileKey(x, y) {
+  return `${x},${y}`;
+}
+
+function findDirectionToTarget(startTile, targetTile, allowGate = false) {
+  const queue = [];
+  const visited = new Set();
+  const startKey = getTileKey(startTile.x, startTile.y);
+  queue.push({ ...startTile, dirFromStart: null });
+  visited.add(startKey);
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (current.x === targetTile.x && current.y === targetTile.y) {
+      return current.dirFromStart;
+    }
+
+    const neighbors = [
+      { x: current.x + 1, y: current.y, dir: { x: 1, y: 0 } },
+      { x: current.x - 1, y: current.y, dir: { x: -1, y: 0 } },
+      { x: current.x, y: current.y + 1, dir: { x: 0, y: 1 } },
+      { x: current.x, y: current.y - 1, dir: { x: 0, y: -1 } }
+    ];
+
+    for (const n of neighbors) {
+      let nx = n.x;
+      let ny = n.y;
+
+      // Wrap tunnels
+      if (nx < 0) nx = cols - 1;
+      if (nx >= cols) nx = 0;
+      if (ny < 0 || ny >= rows) continue;
+
+      const key = getTileKey(nx, ny);
+      if (visited.has(key)) continue;
+      if (!isPassable(nx, ny, true, allowGate)) continue;
+
+      visited.add(key);
+      queue.push({
+        x: nx,
+        y: ny,
+        dirFromStart: current.dirFromStart || n.dir
+      });
+    }
+  }
+
+  return null;
 }
 
 function moveGhost(ghost, dt) {
@@ -1544,13 +1755,13 @@ function moveGhost(ghost, dt) {
   }
 
   // Apply difficulty multiplier to ghost speed
-  const difficultySettings = DIFFICULTY[currentDifficulty] || DIFFICULTY.NORMAL;
+  const difficultySettings = DIFFICULTY[currentDifficulty] || DIFFICULTY.ARCADE;
   const baseGhostSpeed = ghostSpeed * difficultySettings.ghostSpeedMultiplier;
 
   const currentSpeed = ghost.eaten ? baseGhostSpeed * GHOST_EATEN_SPEED_MULTIPLIER :
                        (frightenedTimer > 0 && !ghost.inHouse ? baseGhostSpeed * GHOST_FRIGHTENED_SPEED_MULTIPLIER :
                         baseGhostSpeed + (level - 1) * GHOST_SPEED_INCREASE_PER_LEVEL);
-  const speed = currentSpeed * dt;
+  const speed = currentSpeed * dt * (slowModeEnabled ? SLOW_MODE_SPEED_MULTIPLIER : 1);
 
   // Special simple movement for ghosts exiting the house
   // Move directly to exit position without complex pathfinding
@@ -1583,31 +1794,32 @@ function moveGhost(ghost, dt) {
   // Special simple movement for eaten ghosts returning home
   // Move directly to ghost house without pathfinding or wall collision
   if (ghost.eaten && ghost.mode === GHOST_MODE.EATEN) {
-    const homeX = ghostHouseCenter.x * tileSize + tileSize / 2;
-    const homeY = ghostHouseCenter.y * tileSize + tileSize / 2;
+    const currentTile = {
+      x: Math.floor(ghost.x / tileSize),
+      y: Math.floor(ghost.y / tileSize)
+    };
+    const targetTile = { ...ghostHouseExit };
+    const dirToHome = findDirectionToTarget(currentTile, targetTile, true);
 
-    // Calculate direct vector to home
-    const dx = homeX - ghost.x;
-    const dy = homeY - ghost.y;
-    const distance = Math.hypot(dx, dy);
+    if (dirToHome) {
+      ghost.dir = dirToHome;
+    }
 
-    // Move directly toward home (no pathfinding, no wall collision)
-    if (distance > speed) {
-      // Normalize direction and move
-      ghost.x += (dx / distance) * speed;
-      ghost.y += (dy / distance) * speed;
-
-      // Update direction for visual purposes
-      const angle = Math.atan2(dy, dx);
-      if (Math.abs(Math.cos(angle)) > Math.abs(Math.sin(angle))) {
-        ghost.dir = { x: Math.sign(dx), y: 0 };
-      } else {
-        ghost.dir = { x: 0, y: Math.sign(dy) };
-      }
+    const nextX = ghost.x + ghost.dir.x * speed;
+    const nextY = ghost.y + ghost.dir.y * speed;
+    const nextTileX = Math.floor(nextX / tileSize);
+    const nextTileY = Math.floor(nextY / tileSize);
+    if (isPassable(nextTileX, nextTileY, true, true)) {
+      ghost.x = nextX;
+      ghost.y = nextY;
     } else {
-      // Reached home - reset ghost
-      ghost.x = homeX;
-      ghost.y = homeY;
+      ghost.x = targetTile.x * tileSize + tileSize / 2;
+      ghost.y = targetTile.y * tileSize + tileSize / 2;
+    }
+
+    if (currentTile.x === targetTile.x && currentTile.y === targetTile.y) {
+      ghost.x = ghostHouseCenter.x * tileSize + tileSize / 2;
+      ghost.y = ghostHouseCenter.y * tileSize + tileSize / 2;
       ghost.eaten = false;
       ghost.inHouse = true;
       ghost.mode = GHOST_MODE.EXITING;
@@ -1787,6 +1999,7 @@ function eatPellet(player) {
     comboTimer = COMBO_TIMER_DURATION;
     comboCount++;
     const comboBonus = Math.min(comboCount, MAX_COMBO_MULTIPLIER);
+    levelStats.pellets += 1;
 
     // Apply score multiplier from DOUBLE power-up
     const scoreMultiplier = isPowerUpActive('DOUBLE') ? 2 : 1;
@@ -1807,7 +2020,7 @@ function eatPellet(player) {
 
   if (powerPellets.delete(key)) {
     // Apply difficulty multiplier to frightened duration
-    const difficultySettings = DIFFICULTY[currentDifficulty] || DIFFICULTY.NORMAL;
+    const difficultySettings = DIFFICULTY[currentDifficulty] || DIFFICULTY.ARCADE;
     const baseDuration = Math.max(
       FRIGHTENED_BASE_DURATION - level * FRIGHTENED_DURATION_DECREASE_PER_LEVEL,
       FRIGHTENED_MIN_DURATION
@@ -1832,7 +2045,7 @@ function eatPellet(player) {
   }
 
   if (pellets.size === 0 && powerPellets.size === 0) {
-    nextLevel();
+    startLevelComplete();
   }
 }
 
@@ -1873,6 +2086,7 @@ function eatFruit(player) {
     const fruit = fruitTimers[idx];
     const fruitInfo = fruitTypes[fruit.type % fruitTypes.length];
     fruitTimers.splice(idx, 1);
+    levelStats.fruit += 1;
 
     const points = fruitInfo.points + level * FRUIT_BONUS_PER_LEVEL;
     addScore(player, points);
@@ -1923,6 +2137,7 @@ function collectPowerUp(player) {
     const powerUp = powerUpSpawns[idx];
     const powerUpInfo = POWERUP_TYPES[powerUp.type];
     powerUpSpawns.splice(idx, 1);
+    levelStats.powerUps += 1;
 
     // Add to active power-ups
     activePowerUps.push({
@@ -2096,8 +2311,26 @@ function updateLeaderboard() {
   setLocalStorageJSON('wackman-leaderboard', leaderboard);
 }
 
+function startLevelComplete() {
+  if (gameState === GAME_STATE.LEVEL_COMPLETE) return;
+
+  levelStats.duration = (Date.now() - levelStats.startedAt) / 1000;
+  lastLevelSummary = {
+    level,
+    time: levelStats.duration,
+    pellets: levelStats.pellets,
+    ghosts: levelStats.ghosts,
+    fruit: levelStats.fruit,
+    powerUps: levelStats.powerUps,
+    livesLost: levelStats.livesLost
+  };
+
+  setState(GAME_STATE.LEVEL_COMPLETE, LEVEL_COMPLETE_DURATION);
+}
+
 function nextLevel() {
   level += 1;
+  resetScatterChaseCycle();
 
   // Track perfect level achievement
   if (sessionStats.perfectLevel) {
@@ -2187,8 +2420,16 @@ function update(dt) {
           setMusicState(MUSIC_STATE.GAMEOVER);
         } else {
           resetPositions();
+          resetScatterChaseCycle();
           setState(GAME_STATE.READY, DYING_STATE_DURATION);
         }
+      }
+      return;
+
+    case GAME_STATE.LEVEL_COMPLETE:
+      stateTimer -= dt;
+      if (stateTimer <= 0) {
+        nextLevel();
       }
       return;
 
@@ -2202,13 +2443,16 @@ function update(dt) {
     ghostMultiplier = 1;
   }
 
-  // Toggle scatter/chase mode
-  scatterTimer += dt;
-  const scatterDuration = Math.max(SCATTER_BASE_DURATION - level, SCATTER_MIN_DURATION);
-  const chaseDuration = CHASE_BASE_DURATION + level * CHASE_DURATION_INCREASE_PER_LEVEL;
-  const cycleDuration = scatterDuration + chaseDuration;
-  const cyclePos = scatterTimer % cycleDuration;
-  scatterMode = cyclePos < scatterDuration;
+  if (!scatterScript.length) {
+    resetScatterChaseCycle();
+  }
+
+  if (scatterPhaseTimer !== Infinity) {
+    scatterPhaseTimer -= dt;
+    if (scatterPhaseTimer <= 0) {
+      advanceScatterPhase();
+    }
+  }
 
   getActivePlayers().forEach((p) => p.alive && movePlayer(p, dt));
   ghosts.forEach((g) => moveGhost(g, dt));
@@ -2266,6 +2510,7 @@ function checkCollisions() {
           // Track statistics
           stats.totalGhostsEaten++;
           sessionStats.ghostsEaten++;
+          levelStats.ghosts += 1;
           ghostsEatenThisPowerUp++;
 
           // Update longest combo
@@ -2304,6 +2549,7 @@ function loseLife(deadPlayer) {
   // Track death statistics
   stats.totalDeaths++;
   sessionStats.deaths++;
+  levelStats.livesLost += 1;
   sessionStats.perfectLevel = false;
   consecutivePerfectLevels = 0;
 
@@ -2888,7 +3134,7 @@ canvas.addEventListener('touchend', (e) => {
   const dx = touchEndX - touchStartX;
   const dy = touchEndY - touchStartY;
 
-  const minSwipe = 30;
+  const minSwipe = swipeDeadZone;
 
   if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > minSwipe) {
     // Horizontal swipe
@@ -2904,6 +3150,8 @@ canvas.addEventListener('touchend', (e) => {
 // ==================== GAME INITIALIZATION ====================
 function startGame() {
   // Start game with READY state countdown
+  levelStats.startedAt = Date.now();
+  levelStats.duration = 0;
   setState(GAME_STATE.READY, READY_STATE_DURATION);
   queueToast(`Level ${level} ready`, { variant: 'strong' });
   playReadyJingle();
@@ -2914,18 +3162,19 @@ function startGame() {
 
 function resetGame() {
   // Apply difficulty settings
-  const difficultySettings = DIFFICULTY[currentDifficulty] || DIFFICULTY.NORMAL;
+  const difficultySettings = DIFFICULTY[currentDifficulty] || DIFFICULTY.ARCADE;
   lives = difficultySettings.livesStart;
 
   level = 1;
   players[0].score = 0;
   players[1].score = 0;
-  scatterTimer = 0;
   comboCount = 0;
   frightenedTimer = 0;
   ghostMultiplier = 1;
   consecutivePerfectLevels = 0;
   ghostsEatenThisPowerUp = 0;
+  lastLevelSummary = null;
+  resetScatterChaseCycle();
 
   // Reset session statistics
   sessionStats = {
@@ -3033,15 +3282,15 @@ document.getElementById('difficulty').addEventListener('click', () => {
     return;
   }
 
-  // Cycle through difficulties: NORMAL -> HARD -> EASY -> NORMAL
-  const difficulties = ['NORMAL', 'HARD', 'EASY'];
+  // Cycle through difficulties: ARCADE -> TURBO -> CASUAL -> ARCADE
+  const difficulties = ['ARCADE', 'TURBO', 'CASUAL'];
   const currentIndex = difficulties.indexOf(currentDifficulty);
   const nextIndex = (currentIndex + 1) % difficulties.length;
   currentDifficulty = difficulties[nextIndex];
 
   // Update button text
   const diffBtn = document.getElementById('difficulty');
-  diffBtn.textContent = currentDifficulty;
+  diffBtn.textContent = DIFFICULTY[currentDifficulty]?.name || currentDifficulty;
 
   // Save to localStorage
   setLocalStorage('wackman-difficulty', currentDifficulty);
@@ -3065,13 +3314,49 @@ masterVolume = parseFloat(savedVolume);
 volumeSlider.value = Math.round(masterVolume * 100);
 volumeValue.textContent = `${Math.round(masterVolume * 100)}%`;
 
+// Accessibility toggles
+const colorblindToggle = document.getElementById('colorblind-toggle');
+if (colorblindToggle) {
+  colorblindToggle.checked = colorblindMode;
+  colorblindToggle.addEventListener('change', (e) => {
+    colorblindMode = e.target.checked;
+    setLocalStorage('wackman-colorblind', colorblindMode ? 'true' : 'false');
+    applyGhostPalette();
+  });
+}
+
+const slowModeToggle = document.getElementById('slowmode-toggle');
+if (slowModeToggle) {
+  slowModeToggle.checked = slowModeEnabled;
+  slowModeToggle.addEventListener('change', (e) => {
+    slowModeEnabled = e.target.checked;
+    setLocalStorage('wackman-slowmode', slowModeEnabled ? 'true' : 'false');
+  });
+}
+
+const swipeDeadZoneSlider = document.getElementById('swipe-deadzone');
+const swipeDeadZoneValue = document.getElementById('swipe-deadzone-value');
+if (swipeDeadZoneSlider) {
+  swipeDeadZoneSlider.value = swipeDeadZone;
+  if (swipeDeadZoneValue) {
+    swipeDeadZoneValue.textContent = `${swipeDeadZone}px`;
+  }
+  swipeDeadZoneSlider.addEventListener('input', (e) => {
+    swipeDeadZone = Number.parseInt(e.target.value, 10) || DEFAULT_SWIPE_DEADZONE;
+    setLocalStorage('wackman-swipe-deadzone', swipeDeadZone);
+    if (swipeDeadZoneValue) {
+      swipeDeadZoneValue.textContent = `${swipeDeadZone}px`;
+    }
+  });
+}
+
 // Load saved difficulty on startup
-const savedDifficulty = getLocalStorage('wackman-difficulty', 'NORMAL');
-currentDifficulty = DIFFICULTY[savedDifficulty] ? savedDifficulty : 'NORMAL';
+const savedDifficulty = getLocalStorage('wackman-difficulty', 'ARCADE');
+currentDifficulty = DIFFICULTY[savedDifficulty] ? savedDifficulty : 'ARCADE';
 if (!DIFFICULTY[savedDifficulty]) {
   setLocalStorage('wackman-difficulty', currentDifficulty);
 }
-document.getElementById('difficulty').textContent = currentDifficulty;
+document.getElementById('difficulty').textContent = DIFFICULTY[currentDifficulty]?.name || currentDifficulty;
 
 function updateModeDisplay() {
   // Hide/show P2 controls info
@@ -3093,4 +3378,5 @@ resetBoard();
 updateHud();
 updateModeDisplay();
 syncLayoutWithState();
+resetScatterChaseCycle();
 requestAnimationFrame(loop);
