@@ -235,10 +235,8 @@ function isGameOver() {
 }
 
 function syncLayoutWithState() {
-  const hud = document.querySelector('.hud');
   const isActive = gameState === GAME_STATE.PLAYING || gameState === GAME_STATE.READY || gameState === GAME_STATE.PAUSED;
   document.body.classList.toggle('game-active', isActive);
-  if (hud) hud.classList.toggle('compact', isActive);
 }
 
 // Get the active players based on game mode

@@ -49,11 +49,6 @@ body {
   left: 0;
 }
 
-body.game-active {
-  padding-top: 12px;
-  padding-bottom: 24px;
-}
-
 /* Animated background */
 body::before {
   content: '';
@@ -303,7 +298,7 @@ body::after {
 .actions {
   display: flex;
   justify-content: center;
-  gap: 12px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
@@ -311,10 +306,10 @@ button {
   background: linear-gradient(135deg, #20204d, #101022);
   color: var(--text);
   border: 2px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  padding: 14px 24px;
+  border-radius: 10px;
+  padding: 9px 12px;
   font-family: 'Press Start 2P', system-ui, sans-serif;
-  font-size: 12px;
+  font-size: 10px;
   cursor: pointer;
   transition: all 0.2s ease;
   box-shadow:
@@ -355,6 +350,8 @@ button:active {
   background: linear-gradient(135deg, #2d2d5a, #1a1a3d);
   border-color: rgba(246, 214, 70, 0.3);
   color: var(--accent);
+  padding: 10px 14px;
+  font-size: 12px;
 }
 
 .btn-start:hover {
@@ -365,13 +362,13 @@ button:active {
 }
 
 .btn-mute {
-  padding: 14px 18px;
-  font-size: 16px;
+  padding: 9px 12px;
+  font-size: 14px;
 }
 
 .btn-pause {
-  padding: 14px 18px;
-  font-size: 16px;
+  padding: 10px 12px;
+  font-size: 14px;
   background: linear-gradient(135deg, #2d2d5a, #1a1a3d);
   border-color: rgba(255, 75, 139, 0.3);
   color: var(--ghost-1);
@@ -390,12 +387,12 @@ button:active {
 }
 
 .btn-mode {
-  padding: 14px 18px;
-  font-size: 12px;
+  padding: 9px 10px;
+  font-size: 10px;
   background: linear-gradient(135deg, #2d2d5a, #1a1a3d);
   border-color: rgba(110, 245, 198, 0.3);
   color: var(--accent-2);
-  min-width: 60px;
+  min-width: 48px;
 }
 
 .btn-mode:hover {
@@ -418,12 +415,12 @@ button:active {
 }
 
 .btn-difficulty {
-  padding: 14px 18px;
-  font-size: 10px;
+  padding: 9px 10px;
+  font-size: 9px;
   background: linear-gradient(135deg, #2d2d5a, #1a1a3d);
   border-color: rgba(255, 139, 66, 0.3);
   color: var(--ghost-3);
-  min-width: 80px;
+  min-width: 72px;
 }
 
 .btn-difficulty:hover {
@@ -434,9 +431,9 @@ button:active {
 }
 
 .btn-settings {
-  padding: 14px 16px;
-  min-width: 56px;
-  font-size: 14px;
+  padding: 8px 10px;
+  min-width: 44px;
+  font-size: 12px;
   background: linear-gradient(135deg, #20324d, #101b2e);
   border-color: rgba(110, 245, 198, 0.25);
   color: var(--accent-2);
@@ -564,10 +561,6 @@ button:active {
   animation: gameGlow 6s ease-in-out infinite alternate;
   width: 100%;
   height: auto;
-}
-
-.game-active .canvas-wrap {
-  margin-top: 12px;
 }
 
 @keyframes wrapGlow {
@@ -772,23 +765,23 @@ button:active {
   }
 
   .actions {
-    gap: 10px;
+    gap: 8px;
   }
 
   button {
-    padding: 12px 14px;
-    font-size: 11px;
+    padding: 9px 10px;
+    font-size: 10px;
   }
 
   .btn-start,
   .btn-pause {
-    font-size: 14px;
+    font-size: 12px;
   }
 
   .btn-mode,
   .btn-difficulty {
     font-size: 10px;
-    min-width: 60px;
+    min-width: 52px;
   }
 
   .volume-control {
