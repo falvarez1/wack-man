@@ -56,17 +56,32 @@
       <button id="pause" class="btn-pause" aria-label="Pause game">⏸</button>
       <button id="mode" class="btn-mode single-player" aria-label="Toggle single or two player mode">1P</button>
       <button id="difficulty" class="btn-difficulty" aria-label="Change difficulty">NORMAL</button>
-    </div>
-    <div class="volume-control">
-      <label for="volume" class="volume-label">VOLUME</label>
-      <input type="range" id="volume" class="volume-slider" min="0" max="100" value="50" aria-label="Volume control">
-      <span id="volume-value" class="volume-value">50%</span>
-      <button id="mute" class="btn-mute" aria-label="Toggle sound on or off">🔊</button>
+      <button id="settings" class="btn-settings" aria-label="Open settings">⚙️</button>
     </div>
   </div>
   <div class="canvas-wrap">
     <canvas id="game" width="672" height="720" aria-label="Game canvas" role="application"></canvas>
   </div>
+  <div id="settings-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-title" aria-hidden="true">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="settings-title">Settings</h2>
+        <button id="close-settings" class="modal-close" aria-label="Close settings">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-section">
+          <div class="modal-section-title">Sound</div>
+          <div class="volume-control">
+            <label for="volume" class="volume-label">VOLUME</label>
+            <input type="range" id="volume" class="volume-slider" min="0" max="100" value="50" aria-label="Volume control">
+            <span id="volume-value" class="volume-value">50%</span>
+            <button id="mute" class="btn-mute" aria-label="Toggle sound on or off">🔊</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="settings-backdrop" class="modal-backdrop" aria-hidden="true"></div>
   <div class="footer">
     <span class="footer-text">Eat pellets • Power up • Eat ghosts • Get combos!</span>
     <span class="footer-credit">Two-player chaos, synthwave vibes</span>

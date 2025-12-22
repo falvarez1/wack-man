@@ -49,6 +49,11 @@ body {
   left: 0;
 }
 
+body.game-active {
+  padding-top: 12px;
+  padding-bottom: 24px;
+}
+
 /* Animated background */
 body::before {
   content: '';
@@ -58,10 +63,39 @@ body::before {
   right: 0;
   bottom: 0;
   background:
+    repeating-linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0.025) 0,
+      rgba(255, 255, 255, 0.025) 1px,
+      rgba(255, 255, 255, 0) 3px,
+      rgba(255, 255, 255, 0) 6px
+    ),
     radial-gradient(circle at 30% 70%, rgba(255, 75, 139, 0.03), transparent 30%),
     radial-gradient(circle at 70% 30%, rgba(110, 245, 198, 0.03), transparent 30%);
   pointer-events: none;
   animation: bgPulse 8s ease-in-out infinite alternate;
+  opacity: 0.08;
+}
+
+body::after {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(1px 1px at 10% 20%, rgba(255, 255, 255, 0.05), transparent 60%),
+    radial-gradient(1.2px 1.2px at 80% 30%, rgba(255, 255, 255, 0.04), transparent 60%),
+    radial-gradient(1px 1px at 30% 80%, rgba(255, 255, 255, 0.05), transparent 60%),
+    radial-gradient(circle at 15% 25%, rgba(110, 245, 198, 0.03), transparent 30%),
+    radial-gradient(circle at 70% 75%, rgba(255, 75, 139, 0.025), transparent 28%),
+    radial-gradient(circle at 50% 40%, rgba(83, 164, 255, 0.03), transparent 30%);
+  mix-blend-mode: screen;
+  opacity: 0.025;
+  animation: nebulaDrift 48s ease-in-out infinite;
+  transform: translate3d(0, 0, 0);
 }
 
 @keyframes bgPulse {
@@ -69,13 +103,19 @@ body::before {
   to { opacity: 1; }
 }
 
+@keyframes nebulaDrift {
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(-3%, -2%, 0) scale(1.02); }
+  100% { transform: translate3d(4%, 3%, 0) scale(1); }
+}
+
 .hud {
-  width: min(700px, 95vw);
+  width: min(640px, 95vw);
   background:
     linear-gradient(135deg, rgba(20, 20, 50, 0.9), rgba(10, 10, 30, 0.95));
   border: 2px solid rgba(110, 245, 198, 0.15);
   border-radius: 20px;
-  padding: 20px 24px;
+  padding: 16px 20px;
   box-shadow:
     0 20px 60px rgba(0, 0, 0, 0.5),
     0 0 40px rgba(110, 245, 198, 0.05),
@@ -93,6 +133,26 @@ body::before {
   right: 0;
   height: 1px;
   background: linear-gradient(90deg, transparent, rgba(110, 245, 198, 0.3), transparent);
+}
+
+.hud.compact {
+  padding: 12px 14px;
+  width: min(520px, 94vw);
+  border-radius: 16px;
+}
+
+.hud.compact .title-container,
+.hud.compact .controls,
+.hud.compact .high-score-display {
+  display: none;
+}
+
+.hud.compact .stats {
+  margin-bottom: 10px;
+}
+
+.hud.compact .actions {
+  gap: 8px;
 }
 
 .title-container {
@@ -373,16 +433,29 @@ button:active {
     0 0 30px rgba(255, 139, 66, 0.3);
 }
 
+.btn-settings {
+  padding: 14px 16px;
+  min-width: 56px;
+  font-size: 14px;
+  background: linear-gradient(135deg, #20324d, #101b2e);
+  border-color: rgba(110, 245, 198, 0.25);
+  color: var(--accent-2);
+}
+
+.btn-settings:hover {
+  border-color: var(--accent-2);
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.4),
+    0 0 30px rgba(110, 245, 198, 0.25);
+}
+
 .volume-control {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 12px;
-  margin-top: 16px;
-  padding: 12px 20px;
-  background: rgba(0, 0, 0, 0.3);
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  flex-wrap: wrap;
+  justify-content: flex-start;
 }
 
 .volume-label {
@@ -394,7 +467,7 @@ button:active {
 .volume-slider {
   -webkit-appearance: none;
   appearance: none;
-  width: 200px;
+  width: min(240px, 100%);
   height: 6px;
   border-radius: 3px;
   background: rgba(255, 255, 255, 0.1);
@@ -462,6 +535,7 @@ button:active {
     inset 0 0 60px rgba(0, 0, 0, 0.3);
   position: relative;
   animation: wrapGlow 5s ease-in-out infinite alternate;
+  width: min(96vw, 880px);
 }
 
 .canvas-wrap::before {
@@ -488,6 +562,12 @@ button:active {
   display: block;
   box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.5);
   animation: gameGlow 6s ease-in-out infinite alternate;
+  width: 100%;
+  height: auto;
+}
+
+.game-active .canvas-wrap {
+  margin-top: 12px;
 }
 
 @keyframes wrapGlow {
@@ -538,6 +618,92 @@ button:active {
 .footer-credit {
   font-size: 9px;
   color: rgba(255, 255, 255, 0.3);
+}
+
+.game-active .footer {
+  display: none;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 10;
+}
+
+.modal.open {
+  display: flex;
+}
+
+.modal-content {
+  background: linear-gradient(160deg, rgba(16, 20, 50, 0.95), rgba(6, 8, 26, 0.95));
+  border: 2px solid rgba(110, 245, 198, 0.25);
+  border-radius: 20px;
+  padding: 18px 20px;
+  width: min(420px, 90vw);
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.6),
+    0 0 40px rgba(110, 245, 198, 0.05);
+  position: relative;
+  z-index: 11;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--accent);
+}
+
+.modal-close {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 14px;
+}
+
+.modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.modal-section {
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.modal-section-title {
+  font-size: 12px;
+  color: var(--accent-2);
+  margin-bottom: 10px;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  z-index: 9;
+}
+
+.modal-backdrop.open {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* Responsive Design */
@@ -708,6 +874,9 @@ canvas:focus-visible {
   }
 
   body::before {
+    animation: none;
+  }
+  body::after {
     animation: none;
   }
 
