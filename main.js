@@ -254,7 +254,11 @@ function dismissToast(toast) {
   if (!toast) return;
   toast.classList.add('is-leaving');
   toast.addEventListener('transitionend', () => toast.remove(), { once: true });
-  setTimeout(() => toast.remove(), 420);
+  setTimeout(() => {
+    if (toast.parentNode) {
+      toast.remove();
+    }
+  }, 420);
 }
 
 /**
@@ -290,6 +294,8 @@ function queueToast(message, options = {}) {
     clearTimeout(timeout);
     dismissToast(toast);
   });
+}
+
 function syncLayoutWithState() {
   const hud = document.querySelector('.hud');
   const isActive = gameState === GAME_STATE.PLAYING || gameState === GAME_STATE.READY || gameState === GAME_STATE.PAUSED;
