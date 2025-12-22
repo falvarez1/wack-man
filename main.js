@@ -225,6 +225,57 @@ function isGameOver() {
   return gameState === GAME_STATE.GAMEOVER;
 }
 
+// ==================== TOAST NOTIFICATIONS ====================
+const MAX_TOASTS = 4;
+const TOAST_DURATION_MS = 3400;
+let toastContainer = null;
+
+function getToastContainer() {
+  if (!toastContainer) {
+    toastContainer = document.createElement('div');
+    toastContainer.className = 'toast-container toast-stack';
+    toastContainer.setAttribute('role', 'status');
+    toastContainer.setAttribute('aria-live', 'polite');
+    document.body.appendChild(toastContainer);
+  }
+  return toastContainer;
+}
+
+function dismissToast(toast) {
+  if (!toast) return;
+  toast.classList.add('is-leaving');
+  toast.addEventListener('transitionend', () => toast.remove(), { once: true });
+  setTimeout(() => toast.remove(), 420);
+}
+
+function queueToast(message, options = {}) {
+  const container = getToastContainer();
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  if (options.variant) {
+    toast.classList.add(`toast-${options.variant}`);
+  }
+  if (options.accent) {
+    toast.style.setProperty('--toast-accent', options.accent);
+  }
+  toast.textContent = message;
+
+  if (container.children.length >= MAX_TOASTS) {
+    dismissToast(container.firstElementChild);
+  }
+
+  container.appendChild(toast);
+
+  // Trigger slide/fade-in
+  requestAnimationFrame(() => toast.classList.add('is-visible'));
+
+  const timeout = setTimeout(() => dismissToast(toast), options.duration || TOAST_DURATION_MS);
+  toast.addEventListener('click', () => {
+    clearTimeout(timeout);
+    dismissToast(toast);
+  });
+}
+
 // Get the active players based on game mode
 function getActivePlayers() {
   return singlePlayerMode ? [players[0]] : players;
@@ -1732,6 +1783,7 @@ function collectPowerUp(player) {
     playSound(660, 0.2, 0.1);
     playSound(880, 0.2, 0.1);
     playSound(1100, 0.2, 0.1);
+    queueToast(`${powerUpInfo.name} activated`, { accent: powerUpInfo.color, variant: 'strong' });
 
     // Apply immediate effects
     if (powerUp.type === 'FREEZE') {
@@ -1920,6 +1972,7 @@ function nextLevel() {
 
   // Transition to READY state
   setState(GAME_STATE.READY, READY_STATE_DURATION);
+  queueToast(`Level ${level} ready`, { variant: 'ghostly' });
 }
 
 function update(dt) {
@@ -2500,6 +2553,7 @@ canvas.addEventListener('touchend', (e) => {
 function startGame() {
   // Start game with READY state countdown
   setState(GAME_STATE.READY, READY_STATE_DURATION);
+  queueToast(`Level ${level} ready`, { variant: 'strong' });
 
   if (audioCtx.state === 'suspended') audioCtx.resume();
   if (!musicMuted) {
