@@ -534,6 +534,7 @@ button:active {
     0 0 60px rgba(110, 245, 198, 0.03),
     inset 0 0 60px rgba(0, 0, 0, 0.3);
   position: relative;
+  animation: wrapGlow 5s ease-in-out infinite alternate;
   width: min(96vw, 880px);
 }
 
@@ -545,7 +546,14 @@ button:active {
   transform: translateX(-50%);
   width: 60%;
   height: 2px;
-  background: linear-gradient(90deg, transparent, rgba(110, 245, 198, 0.4), transparent);
+  background:
+    linear-gradient(90deg,
+      transparent 10%,
+      rgba(110, 245, 198, 0.5) 40%,
+      rgba(246, 214, 70, 0.6) 60%,
+      transparent 90%);
+  background-size: 200% 100%;
+  animation: scanBar 6s linear infinite;
 }
 
 #game {
@@ -553,12 +561,44 @@ button:active {
   border-radius: 16px;
   display: block;
   box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.5);
+  animation: gameGlow 6s ease-in-out infinite alternate;
   width: 100%;
   height: auto;
 }
 
 .game-active .canvas-wrap {
   margin-top: 12px;
+}
+
+@keyframes wrapGlow {
+  from {
+    box-shadow:
+      0 25px 60px rgba(0, 0, 0, 0.6),
+      0 0 60px rgba(110, 245, 198, 0.03),
+      inset 0 0 60px rgba(0, 0, 0, 0.3);
+  }
+  to {
+    box-shadow:
+      0 25px 60px rgba(0, 0, 0, 0.6),
+      0 0 80px rgba(110, 245, 198, 0.08),
+      inset 0 0 70px rgba(0, 0, 0, 0.4);
+  }
+}
+
+@keyframes gameGlow {
+  from {
+    box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.5),
+      0 0 0 rgba(110, 245, 198, 0);
+  }
+  to {
+    box-shadow: inset 0 0 36px rgba(0, 0, 0, 0.6),
+      0 0 40px rgba(110, 245, 198, 0.08);
+  }
+}
+
+@keyframes scanBar {
+  from { background-position: 0% 0; }
+  to { background-position: 200% 0; }
 }
 
 .footer {
@@ -843,5 +883,11 @@ canvas:focus-visible {
   .title {
     animation: none;
     text-shadow: 0 0 10px rgba(246, 214, 70, 0.8), 0 2px 0 #b8860b;
+  }
+
+  .canvas-wrap,
+  #game,
+  .canvas-wrap::before {
+    animation: none !important;
   }
 }
