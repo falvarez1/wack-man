@@ -49,6 +49,11 @@ body {
   left: 0;
 }
 
+body.game-active {
+  padding-top: 12px;
+  padding-bottom: 24px;
+}
+
 /* Animated background */
 body::before {
   content: '';
@@ -70,12 +75,12 @@ body::before {
 }
 
 .hud {
-  width: min(700px, 95vw);
+  width: min(640px, 95vw);
   background:
     linear-gradient(135deg, rgba(20, 20, 50, 0.9), rgba(10, 10, 30, 0.95));
   border: 2px solid rgba(110, 245, 198, 0.15);
   border-radius: 20px;
-  padding: 20px 24px;
+  padding: 16px 20px;
   box-shadow:
     0 20px 60px rgba(0, 0, 0, 0.5),
     0 0 40px rgba(110, 245, 198, 0.05),
@@ -93,6 +98,26 @@ body::before {
   right: 0;
   height: 1px;
   background: linear-gradient(90deg, transparent, rgba(110, 245, 198, 0.3), transparent);
+}
+
+.hud.compact {
+  padding: 12px 14px;
+  width: min(520px, 94vw);
+  border-radius: 16px;
+}
+
+.hud.compact .title-container,
+.hud.compact .controls,
+.hud.compact .high-score-display {
+  display: none;
+}
+
+.hud.compact .stats {
+  margin-bottom: 10px;
+}
+
+.hud.compact .actions {
+  gap: 8px;
 }
 
 .title-container {
@@ -373,16 +398,29 @@ button:active {
     0 0 30px rgba(255, 139, 66, 0.3);
 }
 
+.btn-settings {
+  padding: 14px 16px;
+  min-width: 56px;
+  font-size: 14px;
+  background: linear-gradient(135deg, #20324d, #101b2e);
+  border-color: rgba(110, 245, 198, 0.25);
+  color: var(--accent-2);
+}
+
+.btn-settings:hover {
+  border-color: var(--accent-2);
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.4),
+    0 0 30px rgba(110, 245, 198, 0.25);
+}
+
 .volume-control {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 12px;
-  margin-top: 16px;
-  padding: 12px 20px;
-  background: rgba(0, 0, 0, 0.3);
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  flex-wrap: wrap;
+  justify-content: flex-start;
 }
 
 .volume-label {
@@ -394,7 +432,7 @@ button:active {
 .volume-slider {
   -webkit-appearance: none;
   appearance: none;
-  width: 200px;
+  width: min(240px, 100%);
   height: 6px;
   border-radius: 3px;
   background: rgba(255, 255, 255, 0.1);
@@ -461,6 +499,7 @@ button:active {
     0 0 60px rgba(110, 245, 198, 0.03),
     inset 0 0 60px rgba(0, 0, 0, 0.3);
   position: relative;
+  width: min(96vw, 880px);
 }
 
 .canvas-wrap::before {
@@ -479,6 +518,12 @@ button:active {
   border-radius: 16px;
   display: block;
   box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.5);
+  width: 100%;
+  height: auto;
+}
+
+.game-active .canvas-wrap {
+  margin-top: 12px;
 }
 
 .footer {
@@ -498,6 +543,92 @@ button:active {
 .footer-credit {
   font-size: 9px;
   color: rgba(255, 255, 255, 0.3);
+}
+
+.game-active .footer {
+  display: none;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 10;
+}
+
+.modal.open {
+  display: flex;
+}
+
+.modal-content {
+  background: linear-gradient(160deg, rgba(16, 20, 50, 0.95), rgba(6, 8, 26, 0.95));
+  border: 2px solid rgba(110, 245, 198, 0.25);
+  border-radius: 20px;
+  padding: 18px 20px;
+  width: min(420px, 90vw);
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.6),
+    0 0 40px rgba(110, 245, 198, 0.05);
+  position: relative;
+  z-index: 11;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--accent);
+}
+
+.modal-close {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 14px;
+}
+
+.modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.modal-section {
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.modal-section-title {
+  font-size: 12px;
+  color: var(--accent-2);
+  margin-bottom: 10px;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  z-index: 9;
+}
+
+.modal-backdrop.open {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* Responsive Design */
