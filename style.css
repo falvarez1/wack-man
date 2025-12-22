@@ -472,7 +472,12 @@ button:active {
   transform: translateX(-50%);
   width: 60%;
   height: 2px;
-  background: linear-gradient(90deg, transparent, rgba(110, 245, 198, 0.4), transparent);
+  background:
+    linear-gradient(90deg,
+      transparent 10%,
+      rgba(110, 245, 198, 0.5) 40%,
+      rgba(246, 214, 70, 0.6) 60%,
+      transparent 90%);
   background-size: 200% 100%;
   animation: scanBar 6s linear infinite;
 }
@@ -709,5 +714,11 @@ canvas:focus-visible {
   .title {
     animation: none;
     text-shadow: 0 0 10px rgba(246, 214, 70, 0.8), 0 2px 0 #b8860b;
+  }
+
+  .canvas-wrap,
+  #game,
+  .canvas-wrap::before {
+    animation: none !important;
   }
 }
