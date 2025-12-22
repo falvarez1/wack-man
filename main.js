@@ -1674,13 +1674,13 @@ function eatFruit(player) {
  */
 function spawnPowerUp() {
   const emptyTiles = [];
-  for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < cols; col++) {
-      if (board[row][col] === 0 && Math.hypot(col - 14, row - 15) > 5) {
-        emptyTiles.push({ x: col, y: row });
+  layout.forEach((rowString, y) => {
+    [...rowString].forEach((cell, x) => {
+      if (isPassable(x, y, false, false) && !isInGhostHouse(x * tileSize, y * tileSize)) {
+        emptyTiles.push({ x, y });
       }
-    }
-  }
+    });
+  });
 
   if (emptyTiles.length === 0) return;
 
@@ -1809,6 +1809,8 @@ function unlockAchievement(achievementId) {
  * Checks and unlocks achievements based on current stats
  */
 function checkAchievements() {
+  const totalScore = players[0].score + players[1].score;
+
   // First Blood - eat first ghost
   if (stats.totalGhostsEaten >= 1) {
     unlockAchievement('first_blood');
@@ -1862,6 +1864,7 @@ function saveStats() {
  * Updates the leaderboard with current score
  */
 function updateLeaderboard() {
+  const totalScore = players[0].score + players[1].score;
   const entry = {
     score: totalScore,
     level: level,
