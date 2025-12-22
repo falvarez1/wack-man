@@ -28,6 +28,7 @@ const POWER_PELLET_SCORE = 50;
 const GHOST_BASE_SCORE = 200;
 const MAX_COMBO_MULTIPLIER = 10;
 const COMBO_TIMER_DURATION = 0.5;
+const COMBO_TOAST_THRESHOLDS = [5, 10, 15, 20];
 const EXTRA_LIFE_FIRST_THRESHOLD = 10000;
 const EXTRA_LIFE_RECURRING_INTERVAL = 50000;
 
@@ -92,6 +93,14 @@ const COLORBLIND_GHOST_COLORS = ['#ffb000', '#648fff', '#785ef0', '#dc267f'];
 const DEFAULT_GHOST_COLORS = ['#ff4b8b', '#53a4ff', '#ff8c42', '#b967ff'];
 const SLOW_MODE_SPEED_MULTIPLIER = 0.65;
 const DEFAULT_SWIPE_DEADZONE = 30;
+
+// Showcase messaging for attract-mode vibes
+const ATTRACT_MESSAGES = [
+  { title: 'NEON MAZE SHOWDOWN', subtitle: 'Swipe or press start to dive in' },
+  { title: 'CHAIN THE CHAOS', subtitle: 'Keep combos alive for bigger juice' },
+  { title: 'POWER-UPS DROP IN', subtitle: 'Freeze ghosts or double your score' },
+  { title: '2P PARTY READY', subtitle: 'Toggle 1P/2P on the fly for couch co-op' },
+];
 
 // ==================== DIFFICULTY SYSTEM ====================
 const DIFFICULTY = {
@@ -216,6 +225,7 @@ let level = 1;
 let highScore = getLocalStorage('wackman-highscore', 0);
 let comboTimer = 0;
 let comboCount = 0;
+let lastComboToast = 0;
 let screenShake = 0;
 let screenFlash = 0;
 let retroPulse = 0;
@@ -828,6 +838,7 @@ const activePowerUps = [];
 const powerUpSpawns = [];
 let consecutivePerfectLevels = 0;
 let ghostsEatenThisPowerUp = 0;
+let hasStartedOnce = false;
 
 // ==================== AUDIO SYSTEM ====================
 const MUSIC_STATE = {
@@ -1315,16 +1326,30 @@ function drawUI() {
 
   // Idle screen - show instructions
   if (gameState === GAME_STATE.IDLE) {
+    const attractIdx = Math.floor(Date.now() / 4000) % ATTRACT_MESSAGES.length;
+    const attract = ATTRACT_MESSAGES[attractIdx];
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = '#f6d646';
+    ctx.shadowColor = '#f6d646';
+    ctx.shadowBlur = 18;
+    ctx.font = '18px "Press Start 2P", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(attract.title, canvas.width / 2, canvas.height / 2 - 16);
+    ctx.shadowBlur = 0;
+
+    ctx.font = '10px "Press Start 2P", monospace';
     ctx.fillStyle = '#6ef5c6';
     ctx.shadowColor = '#6ef5c6';
-    ctx.shadowBlur = 15;
-    ctx.font = '14px "Press Start 2P", monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('PRESS START', canvas.width / 2, canvas.height / 2);
+    ctx.shadowBlur = 12;
+    ctx.fillText(attract.subtitle, canvas.width / 2, canvas.height / 2 + 6);
     ctx.shadowBlur = 0;
-    ctx.font = '10px "Press Start 2P", monospace';
+
+    ctx.font = '9px "Press Start 2P", monospace';
     ctx.fillStyle = '#aaa';
-    ctx.fillText('or press any movement key', canvas.width / 2, canvas.height / 2 + 25);
+    ctx.fillText('Press start or any movement key', canvas.width / 2, canvas.height / 2 + 30);
   }
 
   // Paused indicator
@@ -2009,6 +2034,17 @@ function eatPellet(player) {
     createParticle(player.x, player.y, '#f6d646', 'pellet');
     playSound(520 + comboCount * 20, 0.04, 0.08);
 
+    // Celebrate chain milestones with toasts and extra juice
+    const milestone = COMBO_TOAST_THRESHOLDS
+      .filter((m) => comboCount >= m)
+      .sort((a, b) => b - a)[0];
+    if (milestone && milestone > lastComboToast) {
+      queueToast(`${comboCount}x chain — keep it alive!`, { variant: 'strong', accent: '#f6d646' });
+      triggerRetroPulse(0.4);
+      screenFlash = Math.min(1, screenFlash + 0.18);
+      lastComboToast = milestone;
+    }
+
     // Track statistics
     stats.totalPelletsEaten++;
     sessionStats.pelletsEaten++;
@@ -2163,6 +2199,8 @@ function collectPowerUp(player) {
     playSound(1100, 0.2, 0.1);
     queueToast(`${powerUpInfo.name} activated`, { accent: powerUpInfo.color, variant: 'strong' });
     triggerRetroPulse(0.8);
+    screenFlash = Math.min(1, screenFlash + 0.35);
+    screenShake = Math.max(screenShake, 0.35);
 
     // Apply immediate effects
     if (powerUp.type === 'FREEZE') {
@@ -2337,6 +2375,7 @@ function nextLevel() {
     stats.perfectLevels++;
     consecutivePerfectLevels++;
     unlockAchievement('perfect');
+    queueToast('Perfect run! No deaths.', { variant: 'ghostly', accent: '#6ef5c6' });
   } else {
     consecutivePerfectLevels = 0;
   }
@@ -2384,7 +2423,10 @@ function update(dt) {
   // Update combo timer
   if (comboTimer > 0) {
     comboTimer -= dt;
-    if (comboTimer <= 0) comboCount = 0;
+    if (comboTimer <= 0) {
+      comboCount = 0;
+      lastComboToast = 0;
+    }
   }
 
   updateParticles(dt);
@@ -2506,6 +2548,8 @@ function checkCollisions() {
           createScorePopup(g.x, g.y - 20, points, '#fff');
           ghostMultiplier *= 2;
           triggerRetroPulse(0.45);
+          screenShake = Math.max(screenShake, 0.6);
+          screenFlash = Math.min(1, screenFlash + 0.25);
 
           // Track statistics
           stats.totalGhostsEaten++;
@@ -2588,6 +2632,7 @@ function resetPositions() {
   frightenedTimer = 0;
   ghostMultiplier = 1;
   comboCount = 0;
+  lastComboToast = 0;
 }
 
 function showGameOver() {
@@ -2747,6 +2792,15 @@ function updateHud() {
   // Update high score display if it exists
   const highScoreEl = document.getElementById('high-score');
   if (highScoreEl) highScoreEl.textContent = highScore;
+}
+
+function updateStartButtonLabel() {
+  const startBtn = document.getElementById('start');
+  if (!startBtn) return;
+  const isRestart = hasStartedOnce;
+  startBtn.textContent = isRestart ? '⟳ RESTART' : '▶ START';
+  startBtn.setAttribute('aria-label', isRestart ? 'Restart game' : 'Start game');
+  startBtn.classList.toggle('is-restart', isRestart);
 }
 
 // ==================== AUDIO ====================
@@ -3155,6 +3209,8 @@ function startGame() {
   setState(GAME_STATE.READY, READY_STATE_DURATION);
   queueToast(`Level ${level} ready`, { variant: 'strong' });
   playReadyJingle();
+  hasStartedOnce = true;
+  updateStartButtonLabel();
 
   if (audioCtx.state === 'suspended') audioCtx.resume();
   setMusicState(MUSIC_STATE.NORMAL);
@@ -3169,6 +3225,7 @@ function resetGame() {
   players[0].score = 0;
   players[1].score = 0;
   comboCount = 0;
+  lastComboToast = 0;
   frightenedTimer = 0;
   ghostMultiplier = 1;
   consecutivePerfectLevels = 0;
@@ -3198,18 +3255,32 @@ function resetGame() {
   resetPositions();
   updateHud();
   setState(GAME_STATE.IDLE);
+  updateStartButtonLabel();
 }
 
-document.getElementById('start').addEventListener('click', () => {
-  if (gameState === GAME_STATE.GAMEOVER || lives <= 0) {
-    resetGame();
-    startGame();
-  } else if (gameState === GAME_STATE.IDLE) {
-    startGame();
-  } else if (gameState === GAME_STATE.PAUSED) {
-    setState(GAME_STATE.PLAYING);
-  }
-});
+const startButton = document.getElementById('start');
+if (startButton) {
+  startButton.addEventListener('click', () => {
+    // If we're mid-run (or about to start), treat this as a quick restart
+    if (gameState === GAME_STATE.PLAYING || gameState === GAME_STATE.READY || gameState === GAME_STATE.PAUSED) {
+      resetGame();
+      startGame();
+      return;
+    }
+
+    // If game over or out of lives, reset then start fresh
+    if (gameState === GAME_STATE.GAMEOVER || lives <= 0) {
+      resetGame();
+      startGame();
+      return;
+    }
+
+    // Normal idle start
+    if (gameState === GAME_STATE.IDLE) {
+      startGame();
+    }
+  });
+}
 
 const muteButton = document.getElementById('mute');
 if (muteButton) {
@@ -3377,6 +3448,7 @@ initMazeCache();
 resetBoard();
 updateHud();
 updateModeDisplay();
+updateStartButtonLabel();
 syncLayoutWithState();
 resetScatterChaseCycle();
 requestAnimationFrame(loop);
