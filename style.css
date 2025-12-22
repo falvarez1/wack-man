@@ -361,6 +361,22 @@ button:active {
     0 0 30px rgba(246, 214, 70, 0.3);
 }
 
+.btn-start.is-restart {
+  background: linear-gradient(135deg, #301732, #1b0e24);
+  border-color: rgba(255, 93, 217, 0.45);
+  color: #ff5dd9;
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.45),
+    0 0 26px rgba(255, 93, 217, 0.35);
+}
+
+.btn-start.is-restart:hover {
+  border-color: #ff5dd9;
+  box-shadow:
+    0 14px 32px rgba(0, 0, 0, 0.48),
+    0 0 36px rgba(255, 93, 217, 0.35);
+}
+
 .btn-mute {
   padding: 9px 12px;
   font-size: 14px;
