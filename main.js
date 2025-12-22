@@ -233,7 +233,7 @@ let toastContainer = null;
 function getToastContainer() {
   if (!toastContainer) {
     toastContainer = document.createElement('div');
-    toastContainer.className = 'toast-container toast-stack';
+    toastContainer.className = 'toast-container';
     toastContainer.setAttribute('role', 'status');
     toastContainer.setAttribute('aria-live', 'polite');
     document.body.appendChild(toastContainer);
@@ -248,6 +248,14 @@ function dismissToast(toast) {
   setTimeout(() => toast.remove(), 420);
 }
 
+/**
+ * Enqueue a toast notification with neon styling and auto-dismiss
+ * @param {string} message - Text to display
+ * @param {Object} [options] - Toast options
+ * @param {string} [options.variant] - Visual variant (strong|ghostly)
+ * @param {string} [options.accent] - Custom accent color
+ * @param {number} [options.duration] - Custom duration in ms
+ */
 function queueToast(message, options = {}) {
   const container = getToastContainer();
   const toast = document.createElement('div');
@@ -266,7 +274,6 @@ function queueToast(message, options = {}) {
 
   container.appendChild(toast);
 
-  // Trigger slide/fade-in
   requestAnimationFrame(() => toast.classList.add('is-visible'));
 
   const timeout = setTimeout(() => dismissToast(toast), options.duration || TOAST_DURATION_MS);

@@ -504,12 +504,11 @@ button:active {
   position: fixed;
   top: max(16px, env(safe-area-inset-top));
   right: max(16px, env(safe-area-inset-right));
-  display: flex;
-  flex-direction: column;
+  display: grid;
   gap: 12px;
+  width: min(320px, 90vw);
   pointer-events: none;
   z-index: 10;
-  width: min(320px, 90vw);
 }
 
 .toast {
@@ -517,7 +516,7 @@ button:active {
   position: relative;
   padding: 14px 16px 14px 18px;
   background: rgba(8, 8, 20, 0.9);
-  border: 2px solid rgba(110, 245, 198, 0.3);
+  border: 2px solid rgba(110, 245, 198, 0.35);
   border-image: linear-gradient(135deg, var(--toast-accent), #ff4b8b) 1;
   border-radius: 14px;
   color: #f5f5ff;
@@ -570,11 +569,6 @@ button:active {
   --toast-accent: var(--ghost-1);
 }
 
-.toast-stack {
-  display: grid;
-  gap: 12px;
-}
-
 @keyframes toastPulse {
   from {
     box-shadow:
@@ -587,17 +581,6 @@ button:active {
       0 20px 50px rgba(0, 0, 0, 0.55),
       0 0 22px rgba(255, 75, 139, 0.18),
       inset 0 1px 0 rgba(255, 255, 255, 0.12);
-  }
-}
-
-@keyframes toastSlideIn {
-  from {
-    opacity: 0;
-    transform: translateX(24px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
   }
 }
 
