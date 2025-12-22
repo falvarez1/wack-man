@@ -139,7 +139,15 @@ let stateTimer = 0; // Timer for state transitions
 function getLocalStorage(key, defaultValue) {
   try {
     const value = localStorage.getItem(key);
-    return value !== null ? parseInt(value, 10) : defaultValue;
+    if (value === null) return defaultValue;
+
+    // Preserve strings but safely parse numbers
+    if (typeof defaultValue === 'number') {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : defaultValue;
+    }
+
+    return value;
   } catch (e) {
     console.warn(`Failed to read from localStorage: ${e.message}`);
     return defaultValue;
@@ -1341,7 +1349,7 @@ function moveGhost(ghost, dt) {
   }
 
   // Apply difficulty multiplier to ghost speed
-  const difficultySettings = DIFFICULTY[currentDifficulty];
+  const difficultySettings = DIFFICULTY[currentDifficulty] || DIFFICULTY.NORMAL;
   const baseGhostSpeed = ghostSpeed * difficultySettings.ghostSpeedMultiplier;
 
   const currentSpeed = ghost.eaten ? baseGhostSpeed * GHOST_EATEN_SPEED_MULTIPLIER :
@@ -1600,7 +1608,7 @@ function eatPellet(player) {
 
   if (powerPellets.delete(key)) {
     // Apply difficulty multiplier to frightened duration
-    const difficultySettings = DIFFICULTY[currentDifficulty];
+    const difficultySettings = DIFFICULTY[currentDifficulty] || DIFFICULTY.NORMAL;
     const baseDuration = Math.max(
       FRIGHTENED_BASE_DURATION - level * FRIGHTENED_DURATION_DECREASE_PER_LEVEL,
       FRIGHTENED_MIN_DURATION
@@ -2559,7 +2567,7 @@ function startGame() {
 
 function resetGame() {
   // Apply difficulty settings
-  const difficultySettings = DIFFICULTY[currentDifficulty];
+  const difficultySettings = DIFFICULTY[currentDifficulty] || DIFFICULTY.NORMAL;
   lives = difficultySettings.livesStart;
 
   level = 1;
@@ -2713,7 +2721,10 @@ volumeValue.textContent = `${Math.round(masterVolume * 100)}%`;
 
 // Load saved difficulty on startup
 const savedDifficulty = getLocalStorage('wackman-difficulty', 'NORMAL');
-currentDifficulty = savedDifficulty;
+currentDifficulty = DIFFICULTY[savedDifficulty] ? savedDifficulty : 'NORMAL';
+if (!DIFFICULTY[savedDifficulty]) {
+  setLocalStorage('wackman-difficulty', currentDifficulty);
+}
 document.getElementById('difficulty').textContent = currentDifficulty;
 
 function updateModeDisplay() {
