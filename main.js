@@ -234,6 +234,68 @@ function isGameOver() {
   return gameState === GAME_STATE.GAMEOVER;
 }
 
+// ==================== TOAST NOTIFICATIONS ====================
+const MAX_TOASTS = 4;
+const TOAST_DURATION_MS = 3400;
+let toastContainer = null;
+
+function getToastContainer() {
+  if (!toastContainer) {
+    toastContainer = document.createElement('div');
+    toastContainer.className = 'toast-container';
+    toastContainer.setAttribute('role', 'status');
+    toastContainer.setAttribute('aria-live', 'polite');
+    document.body.appendChild(toastContainer);
+  }
+  return toastContainer;
+}
+
+function dismissToast(toast) {
+  if (!toast) return;
+  toast.classList.add('is-leaving');
+  toast.addEventListener('transitionend', () => toast.remove(), { once: true });
+  setTimeout(() => {
+    if (toast.parentNode) {
+      toast.remove();
+    }
+  }, 420);
+}
+
+/**
+ * Enqueue a toast notification with neon styling and auto-dismiss
+ * @param {string} message - Text to display
+ * @param {Object} [options] - Toast options
+ * @param {string} [options.variant] - Visual variant (strong|ghostly)
+ * @param {string} [options.accent] - Custom accent color
+ * @param {number} [options.duration] - Custom duration in ms
+ */
+function queueToast(message, options = {}) {
+  const container = getToastContainer();
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  if (options.variant) {
+    toast.classList.add(`toast-${options.variant}`);
+  }
+  if (options.accent) {
+    toast.style.setProperty('--toast-accent', options.accent);
+  }
+  toast.textContent = message;
+
+  if (container.children.length >= MAX_TOASTS) {
+    dismissToast(container.firstElementChild);
+  }
+
+  container.appendChild(toast);
+
+  requestAnimationFrame(() => toast.classList.add('is-visible'));
+
+  const timeout = setTimeout(() => dismissToast(toast), options.duration || TOAST_DURATION_MS);
+  toast.addEventListener('click', () => {
+    clearTimeout(timeout);
+    dismissToast(toast);
+  });
+}
+
 function syncLayoutWithState() {
   const isActive = gameState === GAME_STATE.PLAYING || gameState === GAME_STATE.READY || gameState === GAME_STATE.PAUSED;
   document.body.classList.toggle('game-active', isActive);
@@ -1746,6 +1808,7 @@ function collectPowerUp(player) {
     playSound(660, 0.2, 0.1);
     playSound(880, 0.2, 0.1);
     playSound(1100, 0.2, 0.1);
+    queueToast(`${powerUpInfo.name} activated`, { accent: powerUpInfo.color, variant: 'strong' });
 
     // Apply immediate effects
     if (powerUp.type === 'FREEZE') {
@@ -1934,6 +1997,7 @@ function nextLevel() {
 
   // Transition to READY state
   setState(GAME_STATE.READY, READY_STATE_DURATION);
+  queueToast(`Level ${level} ready`, { variant: 'ghostly' });
 }
 
 function update(dt) {
@@ -2555,6 +2619,7 @@ canvas.addEventListener('touchend', (e) => {
 function startGame() {
   // Start game with READY state countdown
   setState(GAME_STATE.READY, READY_STATE_DURATION);
+  queueToast(`Level ${level} ready`, { variant: 'strong' });
 
   if (audioCtx.state === 'suspended') audioCtx.resume();
   if (!musicMuted) {
