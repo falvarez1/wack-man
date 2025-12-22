@@ -63,15 +63,50 @@ body::before {
   right: 0;
   bottom: 0;
   background:
+    repeating-linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0.025) 0,
+      rgba(255, 255, 255, 0.025) 1px,
+      rgba(255, 255, 255, 0) 3px,
+      rgba(255, 255, 255, 0) 6px
+    ),
     radial-gradient(circle at 30% 70%, rgba(255, 75, 139, 0.03), transparent 30%),
     radial-gradient(circle at 70% 30%, rgba(110, 245, 198, 0.03), transparent 30%);
   pointer-events: none;
   animation: bgPulse 8s ease-in-out infinite alternate;
+  opacity: 0.08;
+}
+
+body::after {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(1px 1px at 10% 20%, rgba(255, 255, 255, 0.05), transparent 60%),
+    radial-gradient(1.2px 1.2px at 80% 30%, rgba(255, 255, 255, 0.04), transparent 60%),
+    radial-gradient(1px 1px at 30% 80%, rgba(255, 255, 255, 0.05), transparent 60%),
+    radial-gradient(circle at 15% 25%, rgba(110, 245, 198, 0.03), transparent 30%),
+    radial-gradient(circle at 70% 75%, rgba(255, 75, 139, 0.025), transparent 28%),
+    radial-gradient(circle at 50% 40%, rgba(83, 164, 255, 0.03), transparent 30%);
+  mix-blend-mode: screen;
+  opacity: 0.025;
+  animation: nebulaDrift 48s ease-in-out infinite;
+  transform: translate3d(0, 0, 0);
 }
 
 @keyframes bgPulse {
   from { opacity: 0.5; }
   to { opacity: 1; }
+}
+
+@keyframes nebulaDrift {
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(-3%, -2%, 0) scale(1.02); }
+  100% { transform: translate3d(4%, 3%, 0) scale(1); }
 }
 
 .hud {
@@ -799,6 +834,9 @@ canvas:focus-visible {
   }
 
   body::before {
+    animation: none;
+  }
+  body::after {
     animation: none;
   }
 
