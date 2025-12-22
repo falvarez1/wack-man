@@ -640,7 +640,7 @@ button:active {
   border-image: linear-gradient(135deg, var(--toast-accent), #ff4b8b) 1;
   border-radius: 14px;
   color: #f5f5ff;
-  font-size: 10px;
+  font-size: 14px;
   letter-spacing: 0.5px;
   box-shadow:
     0 15px 40px rgba(0, 0, 0, 0.45),
@@ -702,6 +702,8 @@ button:active {
       0 0 22px rgba(255, 75, 139, 0.18),
       inset 0 1px 0 rgba(255, 255, 255, 0.12);
   }
+}
+
 .game-active .footer {
   display: none;
 }
@@ -973,6 +975,8 @@ canvas:focus-visible {
     animation: none !important;
     transition: none !important;
     transform: none !important;
+  }
+  
   .canvas-wrap,
   #game,
   .canvas-wrap::before {
