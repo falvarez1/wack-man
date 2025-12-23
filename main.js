@@ -65,6 +65,9 @@ const SCORE_SHAKE_SCALE = 0.002;
 const NEAR_MISS_DISTANCE = tileSize * 1.2;
 const CLOSE_CALL_COOLDOWN = 1.25;
 const RESPAWN_BEAM_DURATION = 1.4;
+const RESPAWN_BEAM_SEGMENTS = 8;
+const RESPAWN_BEAM_SWAY = 16;
+const RESPAWN_BEAM_JITTER = 6;
 const COMBO_CALLUPS = [
   { threshold: 5, text: 'AMAZING!' },
   { threshold: 10, text: 'INCREDIBLE!' },
@@ -557,10 +560,28 @@ function createFloatingText(x, y, text, color = '#fff', life = 1.4) {
 }
 
 function createRespawnBeam(x, y) {
+  const beamHeight = canvas.height * 0.6;
+  const segmentCount = RESPAWN_BEAM_SEGMENTS;
+  const verticalStep = beamHeight / segmentCount;
+  const segments = [];
+
+  let currentX = x;
+  let currentY = y - beamHeight;
+  segments.push({ x: currentX, y: currentY });
+
+  for (let i = 0; i < segmentCount; i++) {
+    currentY += verticalStep;
+    const swayScale = 1 - i / segmentCount;
+    currentX += (Math.random() - 0.5) * RESPAWN_BEAM_SWAY * swayScale;
+    segments.push({ x: currentX, y: currentY });
+  }
+
   respawnBeams.push({
     x,
     y,
-    time: RESPAWN_BEAM_DURATION
+    time: RESPAWN_BEAM_DURATION,
+    height: beamHeight,
+    segments
   });
 }
 
@@ -631,7 +652,8 @@ function drawRespawnBeams() {
   respawnBeams.forEach(beam => {
     const progress = 1 - beam.time / RESPAWN_BEAM_DURATION;
     const alpha = Math.max(0, 1 - progress * 0.8);
-    const beamHeight = canvas.height * 0.6;
+    const beamHeight = beam.height || canvas.height * 0.6;
+    const jitterPhase = frameTimeMs / 30;
     ctx.save();
     ctx.globalAlpha = alpha;
     const gradient = ctx.createLinearGradient(beam.x, beam.y - beamHeight, beam.x, beam.y + 20);
@@ -639,20 +661,57 @@ function drawRespawnBeams() {
     gradient.addColorStop(0.4, 'rgba(110, 245, 198, 0.15)');
     gradient.addColorStop(0.6, 'rgba(255, 93, 217, 0.2)');
     gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+
+    // Flickering jagged bolt
+    const jaggedSegments = beam.segments?.map((segment, idx) => {
+      const wobble = (Math.sin(jitterPhase + idx) + (Math.random() - 0.5)) * RESPAWN_BEAM_JITTER * (1 - progress * 0.5);
+      return {
+        x: segment.x + wobble,
+        y: segment.y
+      };
+    }) || [
+      { x: beam.x, y: beam.y - beamHeight },
+      { x: beam.x, y: beam.y }
+    ];
+
+    ctx.shadowColor = '#6ef5c6';
+    ctx.shadowBlur = 22;
     ctx.strokeStyle = gradient;
     ctx.lineWidth = 8 + 6 * Math.sin(progress * Math.PI * 2);
     ctx.beginPath();
-    ctx.moveTo(beam.x, beam.y - beamHeight);
+    ctx.moveTo(jaggedSegments[0].x, jaggedSegments[0].y);
+    for (let i = 1; i < jaggedSegments.length; i++) {
+      ctx.lineTo(jaggedSegments[i].x, jaggedSegments[i].y);
+    }
     ctx.lineTo(beam.x, beam.y + 18);
     ctx.stroke();
 
     // Beam core
-    ctx.lineWidth = 2;
+    ctx.shadowBlur = 12;
+    ctx.lineWidth = 3;
     ctx.strokeStyle = '#ffffff';
     ctx.beginPath();
-    ctx.moveTo(beam.x, beam.y - beamHeight);
+    ctx.moveTo(jaggedSegments[0].x, jaggedSegments[0].y);
+    for (let i = 1; i < jaggedSegments.length; i++) {
+      ctx.lineTo(jaggedSegments[i].x, jaggedSegments[i].y);
+    }
     ctx.lineTo(beam.x, beam.y + 18);
     ctx.stroke();
+
+    // Small side forks for extra energy
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(110, 245, 198, 0.7)';
+    jaggedSegments.slice(1, -1).forEach((segment, idx) => {
+      if (idx % 2 === 0) {
+        const forkLength = 12 + Math.random() * 10;
+        const forkDir = idx % 4 === 0 ? -1 : 1;
+        ctx.beginPath();
+        ctx.moveTo(segment.x, segment.y);
+        ctx.lineTo(segment.x + forkDir * forkLength, segment.y - forkLength * 0.6);
+        ctx.stroke();
+      }
+    });
+
     ctx.restore();
   });
   ctx.globalAlpha = 1;
@@ -1281,9 +1340,11 @@ function drawPlayers() {
     ctx.fill();
 
     // Eye
+    const isLeftFacing = p.dir.x < 0 && Math.abs(p.dir.x) >= Math.abs(p.dir.y);
+    const eyeYOffset = isLeftFacing ? 5 : -5;
     ctx.fillStyle = '#000';
     ctx.beginPath();
-    ctx.arc(2, -5, 2, 0, Math.PI * 2);
+    ctx.arc(2, eyeYOffset, 2, 0, Math.PI * 2);
     ctx.fill();
 
     // Wacky Hands power-up animation
