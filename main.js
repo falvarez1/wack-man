@@ -471,6 +471,10 @@ let mazeCache = null;
 let mazeCacheCtx = null;
 
 function initMazeCache() {
+  if (!canvas) {
+    console.warn('Canvas element missing; skipping maze cache setup.');
+    return;
+  }
   mazeCache = document.createElement('canvas');
   mazeCache.width = canvas.width;
   mazeCache.height = canvas.height;
