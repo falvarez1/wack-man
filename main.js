@@ -107,7 +107,8 @@ const SLOW_MODE_SPEED_MULTIPLIER = 0.65;
 const DEFAULT_SWIPE_DEADZONE = 30;
 
 // Frame timing configuration
-const MAX_FRAME_STEP = 1 / 50; // Clamp simulation delta to ~20ms to avoid hitch-based speed spikes
+const MAX_FRAME_STEP = 1 / 60; // Fixed simulation step (~16.67ms) to avoid hitch-based speed spikes
+const MAX_ACCUMULATED_TIME = 0.25; // Cap to avoid spiral of death on long pauses
 
 // Showcase messaging for attract-mode vibes
 const ATTRACT_MESSAGES = [
@@ -235,6 +236,7 @@ function setLocalStorageJSON(key, value) {
 
 // ==================== GAME STATE ====================
 let lastTime = 0;
+let accumulatedTime = 0;
 let lives = 3;
 let level = 1;
 let highScore = getLocalStorage('wackman-highscore', 0);
@@ -1603,36 +1605,12 @@ function drawUI() {
   ctx.textAlign = 'left';
   ctx.fillText(`LVL ${level}`, 10, canvas.height - 10);
 
-  // Combo indicator
+  // Combo indicator (text only to reduce visual clutter)
   if (comboCount > 1) {
     ctx.fillStyle = `rgba(255, 200, 50, ${Math.min(1, comboTimer)})`;
     ctx.font = '12px "Press Start 2P", monospace';
     ctx.textAlign = 'right';
     ctx.fillText(`${comboCount}x COMBO!`, canvas.width - 10, canvas.height - 10);
-
-    const barWidth = 180;
-    const barHeight = 10;
-    const barX = canvas.width / 2 - barWidth / 2;
-    const barY = canvas.height - 28;
-    const progress = Math.max(0, Math.min(1, comboTimer / COMBO_TIMER_DURATION));
-
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
-    ctx.fillRect(barX, barY, barWidth, barHeight);
-
-    const gradient = ctx.createLinearGradient(barX, barY, barX + barWidth, barY);
-    gradient.addColorStop(0, '#f6d646');
-    gradient.addColorStop(1, '#ff5dd9');
-    ctx.fillStyle = gradient;
-    ctx.fillRect(barX, barY, barWidth * progress, barHeight);
-
-    ctx.strokeStyle = 'rgba(255,255,255,0.4)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(barX, barY, barWidth, barHeight);
-
-    ctx.fillStyle = '#111';
-    ctx.font = '9px "Press Start 2P", monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(`${comboCount}x`, canvas.width / 2, barY - 4);
   }
 
   // Ghost multiplier when active
@@ -3038,16 +3016,29 @@ function loop(timestamp) {
     const rawDt = Math.min((now - lastTime) / 1000, 0.12);
     lastTime = now;
 
-    // Clamp delta to avoid hitch-induced speed bursts that make players surge forward
-    let dt = Math.min(rawDt, MAX_FRAME_STEP);
+    // Fixed-step accumulator: processes all elapsed time in small, even slices
+    accumulatedTime = Math.min(accumulatedTime + rawDt, MAX_ACCUMULATED_TIME);
+    let steps = 0;
 
-    // Apply slow-motion effect when eating ghosts
-    if (slowMotionTimer > 0) {
-      dt *= SLOWMO_FACTOR;
-      slowMotionTimer -= dt / SLOWMO_FACTOR; // Decrement in real time
+    while (accumulatedTime >= MAX_FRAME_STEP) {
+      let step = MAX_FRAME_STEP;
+
+      // Apply slow-motion effect when eating ghosts (scales simulation step, not accumulator)
+      if (slowMotionTimer > 0) {
+        step *= SLOWMO_FACTOR;
+        slowMotionTimer = Math.max(0, slowMotionTimer - step / SLOWMO_FACTOR); // Decrement in real time
+      }
+
+      update(step);
+      accumulatedTime -= MAX_FRAME_STEP;
+      steps += 1;
+      if (steps > 10) {
+        // Safety break to avoid spiral-of-death in extreme cases
+        accumulatedTime = 0;
+        break;
+      }
     }
 
-    update(dt);
     drawGrid();
     drawPlayers();
     drawGhosts();
