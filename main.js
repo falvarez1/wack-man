@@ -386,10 +386,6 @@ function syncLayoutWithState() {
     gameState === GAME_STATE.PAUSED ||
     gameState === GAME_STATE.LEVEL_COMPLETE;
   document.body.classList.toggle('game-active', isActive);
-
-  if (!isActive && hudElement && hudElement.classList.contains('hud-collapsed')) {
-    setHudCollapsed(false);
-  }
 }
 
 function buildScatterChaseScript(currentLevel) {
