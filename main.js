@@ -65,6 +65,9 @@ const SCORE_SHAKE_SCALE = 0.002;
 const NEAR_MISS_DISTANCE = tileSize * 1.2;
 const CLOSE_CALL_COOLDOWN = 1.25;
 const RESPAWN_BEAM_DURATION = 1.4;
+const RESPAWN_BEAM_SEGMENTS = 8;
+const RESPAWN_BEAM_SWAY = 16;
+const RESPAWN_BEAM_JITTER = 6;
 const COMBO_CALLUPS = [
   { threshold: 5, text: 'AMAZING!' },
   { threshold: 10, text: 'INCREDIBLE!' },
@@ -269,6 +272,8 @@ let levelStats = {
   duration: 0
 };
 let lastLevelSummary = null;
+let frameTimeMs = 0;
+let frameTime = 0;
 
 /**
  * Transitions game to a new state
@@ -555,10 +560,28 @@ function createFloatingText(x, y, text, color = '#fff', life = 1.4) {
 }
 
 function createRespawnBeam(x, y) {
+  const beamHeight = canvas.height * 0.6;
+  const segmentCount = RESPAWN_BEAM_SEGMENTS;
+  const verticalStep = beamHeight / segmentCount;
+  const segments = [];
+
+  let currentX = x;
+  let currentY = y - beamHeight;
+  segments.push({ x: currentX, y: currentY });
+
+  for (let i = 0; i < segmentCount; i++) {
+    currentY += verticalStep;
+    const swayScale = 1 - i / segmentCount;
+    currentX += (Math.random() - 0.5) * RESPAWN_BEAM_SWAY * swayScale;
+    segments.push({ x: currentX, y: currentY });
+  }
+
   respawnBeams.push({
     x,
     y,
-    time: RESPAWN_BEAM_DURATION
+    time: RESPAWN_BEAM_DURATION,
+    height: beamHeight,
+    segments
   });
 }
 
@@ -629,7 +652,8 @@ function drawRespawnBeams() {
   respawnBeams.forEach(beam => {
     const progress = 1 - beam.time / RESPAWN_BEAM_DURATION;
     const alpha = Math.max(0, 1 - progress * 0.8);
-    const beamHeight = canvas.height * 0.6;
+    const beamHeight = beam.height || canvas.height * 0.6;
+    const jitterPhase = frameTimeMs / 30;
     ctx.save();
     ctx.globalAlpha = alpha;
     const gradient = ctx.createLinearGradient(beam.x, beam.y - beamHeight, beam.x, beam.y + 20);
@@ -637,20 +661,57 @@ function drawRespawnBeams() {
     gradient.addColorStop(0.4, 'rgba(110, 245, 198, 0.15)');
     gradient.addColorStop(0.6, 'rgba(255, 93, 217, 0.2)');
     gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+
+    // Flickering jagged bolt
+    const jaggedSegments = beam.segments?.map((segment, idx) => {
+      const wobble = (Math.sin(jitterPhase + idx) + (Math.random() - 0.5)) * RESPAWN_BEAM_JITTER * (1 - progress * 0.5);
+      return {
+        x: segment.x + wobble,
+        y: segment.y
+      };
+    }) || [
+      { x: beam.x, y: beam.y - beamHeight },
+      { x: beam.x, y: beam.y }
+    ];
+
+    ctx.shadowColor = '#6ef5c6';
+    ctx.shadowBlur = 22;
     ctx.strokeStyle = gradient;
     ctx.lineWidth = 8 + 6 * Math.sin(progress * Math.PI * 2);
     ctx.beginPath();
-    ctx.moveTo(beam.x, beam.y - beamHeight);
+    ctx.moveTo(jaggedSegments[0].x, jaggedSegments[0].y);
+    for (let i = 1; i < jaggedSegments.length; i++) {
+      ctx.lineTo(jaggedSegments[i].x, jaggedSegments[i].y);
+    }
     ctx.lineTo(beam.x, beam.y + 18);
     ctx.stroke();
 
     // Beam core
-    ctx.lineWidth = 2;
+    ctx.shadowBlur = 12;
+    ctx.lineWidth = 3;
     ctx.strokeStyle = '#ffffff';
     ctx.beginPath();
-    ctx.moveTo(beam.x, beam.y - beamHeight);
+    ctx.moveTo(jaggedSegments[0].x, jaggedSegments[0].y);
+    for (let i = 1; i < jaggedSegments.length; i++) {
+      ctx.lineTo(jaggedSegments[i].x, jaggedSegments[i].y);
+    }
     ctx.lineTo(beam.x, beam.y + 18);
     ctx.stroke();
+
+    // Small side forks for extra energy
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(110, 245, 198, 0.7)';
+    jaggedSegments.slice(1, -1).forEach((segment, idx) => {
+      if (idx % 2 === 0) {
+        const forkLength = 12 + Math.random() * 10;
+        const forkDir = idx % 4 === 0 ? -1 : 1;
+        ctx.beginPath();
+        ctx.moveTo(segment.x, segment.y);
+        ctx.lineTo(segment.x + forkDir * forkLength, segment.y - forkLength * 0.6);
+        ctx.stroke();
+      }
+    });
+
     ctx.restore();
   });
   ctx.globalAlpha = 1;
@@ -691,8 +752,7 @@ function drawRetroOverlay() {
     return;
   }
 
-  const timeSource = typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
-  const time = timeSource / 1000;
+  const time = frameTime;
   const sweepX = ((time * RETRO_SWEEP_SPEED) % (canvas.width + 200)) - 200;
 
   // Neon sweep
@@ -795,6 +855,22 @@ const layout = [
   'WWWWWWWWWWWWWWWWWWWWWWWWWWWW'
 ];
 
+function precomputeGateSegments() {
+  gateSegments.length = 0;
+
+  for (let y = 0; y < layout.length; y++) {
+    const row = layout[y];
+    for (let x = 0; x < row.length; x++) {
+      if (row[x] === '-') {
+        gateSegments.push({
+          x: x * tileSize,
+          centerY: y * tileSize + tileSize / 2
+        });
+      }
+    }
+  }
+}
+
 // ==================== INPUT MAPPING ====================
 const directions = {
   ArrowUp: { x: 0, y: -1 },
@@ -810,7 +886,10 @@ const directions = {
 // ==================== GAME OBJECTS ====================
 const pellets = new Set();
 const powerPellets = new Set();
+const pelletRenderList = [];
+const powerPelletRenderList = [];
 const fruitTimers = [];
+const gateSegments = [];
 
 function getGhostPalette() {
   return colorblindMode ? COLORBLIND_GHOST_COLORS : DEFAULT_GHOST_COLORS;
@@ -1001,6 +1080,8 @@ function createGhost(col, row, color, personality) {
 function resetBoard() {
   pellets.clear();
   powerPellets.clear();
+  pelletRenderList.length = 0;
+  powerPelletRenderList.length = 0;
   fruitTimers.length = 0;
   totalPellets = 0;
   levelStats = {
@@ -1013,15 +1094,30 @@ function resetBoard() {
     duration: 0
   };
 
-  layout.forEach((row, y) => {
-    [...row].forEach((cell, x) => {
+  for (let y = 0; y < layout.length; y++) {
+    const row = layout[y];
+    for (let x = 0; x < row.length; x++) {
+      const cell = row[x];
+      const key = `${x},${y}`;
       if (cell === '.') {
-        pellets.add(`${x},${y}`);
+        pellets.add(key);
+        pelletRenderList.push({
+          key,
+          x: x * tileSize + tileSize / 2,
+          y: y * tileSize + tileSize / 2,
+          phase: x + y
+        });
         totalPellets++;
+      } else if (cell === 'o') {
+        powerPellets.add(key);
+        powerPelletRenderList.push({
+          key,
+          x: x * tileSize + tileSize / 2,
+          y: y * tileSize + tileSize / 2
+        });
       }
-      if (cell === 'o') powerPellets.add(`${x},${y}`);
-    });
-  });
+    }
+  }
 }
 
 // ==================== RENDERING ====================
@@ -1047,48 +1143,44 @@ function drawGrid() {
     ctx.drawImage(mazeCache, 0, 0);
   }
 
+  const nowMs = frameTimeMs;
+
   // Draw animated elements that aren't cached
   // Ghost house gate (animated)
-  layout.forEach((row, y) => {
-    [...row].forEach((cell, x) => {
-      if (cell === '-') {
-        const px = x * tileSize;
-        const py = y * tileSize;
-        const pulse = 0.7 + Math.sin(Date.now() / 300) * 0.3;
-        ctx.fillStyle = `rgba(255, 156, 206, ${pulse})`;
-        ctx.fillRect(px, py + tileSize / 2 - 2, tileSize, 4);
+  const gatePulse = 0.7 + Math.sin(nowMs / 300) * 0.3;
+  gateSegments.forEach((gate) => {
+    ctx.fillStyle = `rgba(255, 156, 206, ${gatePulse})`;
+    ctx.fillRect(gate.x, gate.centerY - 2, tileSize, 4);
 
-        // Gate glow
-        ctx.shadowColor = '#ff9cce';
-        ctx.shadowBlur = 10;
-        ctx.fillRect(px, py + tileSize / 2 - 2, tileSize, 4);
-        ctx.shadowBlur = 0;
-      }
-    });
+    // Gate glow
+    ctx.shadowColor = '#ff9cce';
+    ctx.shadowBlur = 10;
+    ctx.fillRect(gate.x, gate.centerY - 2, tileSize, 4);
+    ctx.shadowBlur = 0;
   });
 
   // Draw pellets with subtle animation
-  pellets.forEach((key) => {
-    const [x, y] = key.split(',').map(Number);
-    const pulse = 1 + Math.sin(Date.now() / 500 + x + y) * 0.1;
+  pelletRenderList.forEach((pellet) => {
+    if (!pellets.has(pellet.key)) return;
+    const pulse = 1 + Math.sin(nowMs / 500 + pellet.phase) * 0.1;
     ctx.fillStyle = '#f6d646';
     ctx.shadowColor = '#f6d646';
     ctx.shadowBlur = 4;
     ctx.beginPath();
-    ctx.arc(x * tileSize + tileSize / 2, y * tileSize + tileSize / 2, 3 * pulse, 0, Math.PI * 2);
+    ctx.arc(pellet.x, pellet.y, 3 * pulse, 0, Math.PI * 2);
     ctx.fill();
     ctx.shadowBlur = 0;
   });
 
   // Draw power pellets with strong pulse
-  powerPellets.forEach((key) => {
-    const [x, y] = key.split(',').map(Number);
-    const pulse = 5 + Math.sin(Date.now() / 150) * 3;
+  const powerPulse = 5 + Math.sin(nowMs / 150) * 3;
+  powerPelletRenderList.forEach((pellet) => {
+    if (!powerPellets.has(pellet.key)) return;
     ctx.fillStyle = '#6ef5c6';
     ctx.shadowColor = '#6ef5c6';
     ctx.shadowBlur = 15;
     ctx.beginPath();
-    ctx.arc(x * tileSize + tileSize / 2, y * tileSize + tileSize / 2, pulse, 0, Math.PI * 2);
+    ctx.arc(pellet.x, pellet.y, powerPulse, 0, Math.PI * 2);
     ctx.fill();
     ctx.shadowBlur = 0;
   });
@@ -1097,7 +1189,7 @@ function drawGrid() {
   fruitTimers.forEach((fruit) => {
     const { x, y, type } = fruit;
     const fruitInfo = fruitTypes[type % fruitTypes.length];
-    const bounce = Math.sin(Date.now() / 200) * 2;
+    const bounce = Math.sin(nowMs / 200) * 2;
 
     ctx.fillStyle = fruitInfo.color;
     ctx.shadowColor = fruitInfo.color;
@@ -1116,8 +1208,8 @@ function drawGrid() {
   powerUpSpawns.forEach((powerUp) => {
     const { x, y, type } = powerUp;
     const powerUpInfo = POWERUP_TYPES[type];
-    const pulse = Math.sin(Date.now() / 150) * 0.3 + 1;
-    const rotation = Date.now() / 500;
+    const pulse = Math.sin(nowMs / 150) * 0.3 + 1;
+    const rotation = nowMs / 500;
 
     ctx.save();
     ctx.translate(x * tileSize + tileSize / 2, y * tileSize + tileSize / 2);
@@ -1156,6 +1248,8 @@ function drawGrid() {
 }
 
 function drawPlayers() {
+  const nowMs = frameTimeMs;
+
   players.forEach((p, idx) => {
     // Skip P2 in single-player mode
     if (!isPlayerActive(idx)) return;
@@ -1197,7 +1291,7 @@ function drawPlayers() {
 
     // Shield power-up visual effect
     if (isPowerUpActive('SHIELD')) {
-      const shieldPulse = Math.sin(Date.now() / 100) * 0.2 + 0.8;
+      const shieldPulse = Math.sin(nowMs / 100) * 0.2 + 0.8;
       ctx.strokeStyle = POWERUP_TYPES.SHIELD.color;
       ctx.shadowColor = POWERUP_TYPES.SHIELD.color;
       ctx.shadowBlur = 20 * shieldPulse;
@@ -1213,13 +1307,13 @@ function drawPlayers() {
     const angle = Math.atan2(p.dir.y, p.dir.x) || 0;
 
     // Invincibility flash
-    if (p.invincible > 0 && Math.floor(Date.now() / 100) % 2) {
+    if (p.invincible > 0 && Math.floor(nowMs / 100) % 2) {
       ctx.globalAlpha = 0.5;
     }
 
     // Respawn invincibility aura
     if (p.invincible > 0) {
-      const auraPulse = 1 + Math.sin(Date.now() / 120) * 0.15;
+      const auraPulse = 1 + Math.sin(nowMs / 120) * 0.15;
       ctx.save();
       ctx.rotate(-angle); // neutralize rotation for aura symmetry
       const gradient = ctx.createRadialGradient(0, 0, 8, 0, 0, 26 * auraPulse);
@@ -1238,7 +1332,7 @@ function drawPlayers() {
     ctx.shadowColor = p.color;
     ctx.shadowBlur = 15;
 
-    const mouthOpen = (Math.sin(Date.now() / 80) + 1) * 0.2;
+    const mouthOpen = (Math.sin(nowMs / 80) + 1) * 0.2;
     ctx.beginPath();
     ctx.moveTo(0, 0);
     ctx.arc(0, 0, tileSize / 2 - 3, mouthOpen, Math.PI * 2 - mouthOpen);
@@ -1246,9 +1340,11 @@ function drawPlayers() {
     ctx.fill();
 
     // Eye
+    const isLeftFacing = p.dir.x < 0 && Math.abs(p.dir.x) >= Math.abs(p.dir.y);
+    const eyeYOffset = isLeftFacing ? 5 : -5;
     ctx.fillStyle = '#000';
     ctx.beginPath();
-    ctx.arc(2, -5, 2, 0, Math.PI * 2);
+    ctx.arc(2, eyeYOffset, 2, 0, Math.PI * 2);
     ctx.fill();
 
     // Wacky Hands power-up animation
@@ -1256,7 +1352,7 @@ function drawPlayers() {
       const isMoving = p.dir.x !== 0 || p.dir.y !== 0;
       const baseSpeed = Math.sqrt(p.dir.x * p.dir.x + p.dir.y * p.dir.y);
       const animSpeed = isMoving ? 120 - (baseSpeed * 20) : 150; // Faster animation when moving faster
-      const handWave = Math.sin(Date.now() / animSpeed) * 15; // Up/down 15px oscillation
+      const handWave = Math.sin(nowMs / animSpeed) * 15; // Up/down 15px oscillation
       const handOffset = tileSize / 2 + 5;
 
       // Golden glow effect for hands
@@ -1298,6 +1394,8 @@ function drawPlayers() {
 }
 
 function drawGhosts() {
+  const nowMs = frameTimeMs;
+
   ghosts.forEach((g) => {
     ctx.save();
     ctx.translate(g.x, g.y);
@@ -1323,7 +1421,7 @@ function drawGhosts() {
       eyeColor = '#ffffff';
       pupilColor = '#00d4ff';
     } else if (frightenedTimer > 0 && !g.inHouse) {
-      if (frightenedTimer < FRIGHTENED_WARNING_TIME && Math.floor(Date.now() / 150) % 2) {
+      if (frightenedTimer < FRIGHTENED_WARNING_TIME && Math.floor(nowMs / 150) % 2) {
         ghostColor = '#ffffff';
         eyeColor = '#ff0000';
       } else {
@@ -1346,7 +1444,7 @@ function drawGhosts() {
     ctx.lineTo(tileSize / 2 - 4, tileSize / 2);
 
     // Wavy bottom
-    const waveTime = Date.now() / 100;
+    const waveTime = nowMs / 100;
     const waveCount = 4;
     for (let i = waveCount; i >= 0; i--) {
       const wx = (tileSize / 2 - 4) - (i * (tileSize - 8) / waveCount);
@@ -1418,6 +1516,8 @@ function drawGhosts() {
 }
 
 function drawUI() {
+  const nowMs = frameTimeMs;
+
   // Ready screen
   if (gameState === GAME_STATE.READY) {
     ctx.fillStyle = '#f6d646';
@@ -1431,7 +1531,7 @@ function drawUI() {
 
   // Idle screen - show instructions
   if (gameState === GAME_STATE.IDLE) {
-    const attractIdx = Math.floor(Date.now() / 4000) % ATTRACT_MESSAGES.length;
+    const attractIdx = Math.floor(nowMs / 4000) % ATTRACT_MESSAGES.length;
     const attract = ATTRACT_MESSAGES[attractIdx];
 
     ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
@@ -1893,6 +1993,8 @@ function findDirectionToTarget(startTile, targetTile, allowGate = false) {
 }
 
 function moveGhost(ghost, dt) {
+  const nowMs = frameTimeMs;
+
   // Freeze power-up stops all ghosts
   if (isPowerUpActive('FREEZE') && !ghost.eaten) {
     return;
@@ -1905,7 +2007,7 @@ function moveGhost(ghost, dt) {
   // While waiting to exit, bob up and down
   if (ghost.exitDelay > 0) {
     ghost.exitDelay -= dt;
-    ghost.y = ghost.startY + Math.sin(Date.now() / 200) * 3;
+    ghost.y = ghost.startY + Math.sin(nowMs / 200) * 3;
     return;
   }
 
@@ -2924,9 +3026,15 @@ function spawnFruit() {
 // ==================== GAME LOOP ====================
 function loop(timestamp) {
   try {
-    if (!lastTime) lastTime = timestamp;
-    const rawDt = Math.min((timestamp - lastTime) / 1000, 0.12);
-    lastTime = timestamp;
+    const now = typeof timestamp === 'number'
+      ? timestamp
+      : (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
+
+    if (!lastTime) lastTime = now;
+    frameTimeMs = now;
+    frameTime = frameTimeMs / 1000;
+    const rawDt = Math.min((now - lastTime) / 1000, 0.12);
+    lastTime = now;
 
     // Exponential moving average to smooth out occasional large/small frames
     if (smoothedDt === 0) smoothedDt = rawDt;
@@ -3277,7 +3385,7 @@ function playSiren() {
 
   sirenInterval = setInterval(() => {
     if (musicMuted || gameState !== GAME_STATE.PLAYING || frightenedTimer > 0) return;
-    const freq = 100 + Math.sin(Date.now() / (500 / sirenSpeed)) * 50;
+    const freq = 100 + Math.sin(frameTimeMs / (500 / sirenSpeed)) * 50;
     playSound(freq, 0.1, 0.02);
   }, 150);
 }
@@ -3730,6 +3838,7 @@ function updateModeDisplay() {
 }
 
 // Initialize
+precomputeGateSegments();
 initMazeCache();
 resetBoard();
 updateHud();
