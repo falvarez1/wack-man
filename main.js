@@ -69,6 +69,7 @@ const COMBO_CALLUPS = [
   { threshold: 10, text: 'INCREDIBLE!' },
   { threshold: 15, text: 'UNSTOPPABLE!' }
 ];
+const LIFE_SYMBOL = 'ᗧ';
 
 // Fruit configuration
 const FRUIT_SPAWN_CHANCE = 0.002;
@@ -276,6 +277,9 @@ let levelStats = {
 let lastLevelSummary = null;
 let frameTimeMs = 0;
 let frameTime = 0;
+const hudElement = document.querySelector('.hud');
+const hudToggle = document.getElementById('hud-toggle');
+const touchPad = document.getElementById('touch-pad');
 
 /**
  * Transitions game to a new state
@@ -366,12 +370,26 @@ function queueToast(message, options = {}) {
   });
 }
 
+function setHudCollapsed(collapsed) {
+  if (!hudElement) return;
+  hudElement.classList.toggle('hud-collapsed', collapsed);
+
+  if (hudToggle) {
+    hudToggle.setAttribute('aria-expanded', (!collapsed).toString());
+    hudToggle.setAttribute('aria-label', collapsed ? 'Show game options' : 'Hide game options');
+  }
+}
+
 function syncLayoutWithState() {
   const isActive = gameState === GAME_STATE.PLAYING ||
     gameState === GAME_STATE.READY ||
     gameState === GAME_STATE.PAUSED ||
     gameState === GAME_STATE.LEVEL_COMPLETE;
   document.body.classList.toggle('game-active', isActive);
+
+  if (!isActive && hudElement && hudElement.classList.contains('hud-collapsed')) {
+    setHudCollapsed(false);
+  }
 }
 
 function buildScatterChaseScript(currentLevel) {
@@ -3163,13 +3181,36 @@ function loop(timestamp) {
   }
 }
 
+function renderLivesDisplay(livesCount) {
+  const livesEl = document.getElementById('lives');
+  if (!livesEl) return;
+
+  livesEl.textContent = '';
+  livesEl.setAttribute('aria-label', `${livesCount} lives remaining`);
+
+  if (livesCount <= 0) {
+    const icon = document.createElement('span');
+    icon.className = 'life-icon';
+    icon.textContent = '☠';
+    livesEl.appendChild(icon);
+    return;
+  }
+
+  for (let i = 0; i < livesCount; i++) {
+    const icon = document.createElement('span');
+    icon.className = 'life-icon';
+    icon.textContent = LIFE_SYMBOL;
+    livesEl.appendChild(icon);
+  }
+}
+
 /**
  * Updates the HUD display with current game stats
  */
 function updateHud() {
   document.getElementById('p1-score').textContent = players[0].score;
   document.getElementById('p2-score').textContent = players[1].score;
-  document.getElementById('lives').textContent = lives;
+  renderLivesDisplay(lives);
 
   // Update high score display if it exists
   const highScoreEl = document.getElementById('high-score');
@@ -3543,6 +3584,13 @@ if (closeSettingsButton) {
   closeSettingsButton.addEventListener('click', closeSettings);
 }
 
+if (hudToggle && hudElement) {
+  hudToggle.addEventListener('click', () => {
+    const shouldCollapse = !hudElement.classList.contains('hud-collapsed');
+    setHudCollapsed(shouldCollapse);
+  });
+}
+
 window.addEventListener('keydown', (e) => {
   if (isSettingsOpen()) {
     if (e.code === 'Escape') {
@@ -3608,7 +3656,8 @@ document.addEventListener('visibilitychange', () => {
 let touchStartX = 0;
 let touchStartY = 0;
 
-canvas.addEventListener('touchstart', (e) => {
+function handleTouchStart(e) {
+  if (!e.touches.length) return;
   touchStartX = e.touches[0].clientX;
   touchStartY = e.touches[0].clientY;
   e.preventDefault();
@@ -3618,13 +3667,15 @@ canvas.addEventListener('touchstart', (e) => {
   } else if (gameState === GAME_STATE.PAUSED && lives > 0) {
     setState(GAME_STATE.PLAYING);
   }
-}, { passive: false });
+}
 
-canvas.addEventListener('touchmove', (e) => {
+function handleTouchMove(e) {
   e.preventDefault();
-}, { passive: false });
+}
 
-canvas.addEventListener('touchend', (e) => {
+function handleTouchEnd(e) {
+  if (!e.changedTouches.length) return;
+
   const touchEndX = e.changedTouches[0].clientX;
   const touchEndY = e.changedTouches[0].clientY;
 
@@ -3642,7 +3693,17 @@ canvas.addEventListener('touchend', (e) => {
   }
 
   e.preventDefault();
-}, { passive: false });
+}
+
+function bindSwipeArea(target) {
+  if (!target) return;
+  target.addEventListener('touchstart', handleTouchStart, { passive: false });
+  target.addEventListener('touchmove', handleTouchMove, { passive: false });
+  target.addEventListener('touchend', handleTouchEnd, { passive: false });
+}
+
+bindSwipeArea(canvas);
+bindSwipeArea(touchPad);
 
 // ==================== GAME INITIALIZATION ====================
 function startGame() {
@@ -3650,6 +3711,7 @@ function startGame() {
   levelStats.startedAt = Date.now();
   levelStats.duration = 0;
   setState(GAME_STATE.READY, READY_STATE_DURATION);
+  setHudCollapsed(true);
   queueToast(`Level ${level} ready`, { variant: 'strong' });
   playReadyJingle();
   hasStartedOnce = true;
@@ -3702,6 +3764,7 @@ function resetGame() {
   updateHud();
   setState(GAME_STATE.IDLE);
   updateStartButtonLabel();
+  setHudCollapsed(false);
 }
 
 const startButton = document.getElementById('start');
@@ -3893,6 +3956,7 @@ function updateModeDisplay() {
 precomputeGateSegments();
 initMazeCache();
 resetBoard();
+setHudCollapsed(false);
 updateHud();
 updateModeDisplay();
 updateStartButtonLabel();
