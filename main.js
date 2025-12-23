@@ -106,6 +106,9 @@ const DEFAULT_GHOST_COLORS = ['#ff4b8b', '#53a4ff', '#ff8c42', '#b967ff'];
 const SLOW_MODE_SPEED_MULTIPLIER = 0.65;
 const DEFAULT_SWIPE_DEADZONE = 30;
 
+// Frame timing configuration
+const MAX_FRAME_STEP = 1 / 50; // Clamp simulation delta to ~20ms to avoid hitch-based speed spikes
+
 // Showcase messaging for attract-mode vibes
 const ATTRACT_MESSAGES = [
   { title: 'NEON MAZE SHOWDOWN', subtitle: 'Swipe or press start to dive in' },
@@ -261,7 +264,6 @@ if (!Number.isFinite(swipeDeadZone) || swipeDeadZone < 10) swipeDeadZone = DEFAU
 let scatterScript = [];
 let scatterPhaseIndex = 0;
 let scatterPhaseTimer = 0;
-let smoothedDt = 0;
 let levelStats = {
   pellets: 0,
   ghosts: 0,
@@ -3036,10 +3038,8 @@ function loop(timestamp) {
     const rawDt = Math.min((now - lastTime) / 1000, 0.12);
     lastTime = now;
 
-    // Exponential moving average to smooth out occasional large/small frames
-    if (smoothedDt === 0) smoothedDt = rawDt;
-    smoothedDt = rawDt * 0.25 + smoothedDt * 0.75;
-    let dt = smoothedDt;
+    // Clamp delta to avoid hitch-induced speed bursts that make players surge forward
+    let dt = Math.min(rawDt, MAX_FRAME_STEP);
 
     // Apply slow-motion effect when eating ghosts
     if (slowMotionTimer > 0) {
