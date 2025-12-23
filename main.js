@@ -61,6 +61,15 @@ const CRT_SCANLINE_SPACING = 3;
 const RETRO_PULSE_DECAY_RATE = 0.8;
 const CHROMA_DECAY_RATE = 0.9;
 const RETRO_SWEEP_SPEED = 140;
+const SCORE_SHAKE_SCALE = 0.002;
+const NEAR_MISS_DISTANCE = tileSize * 1.2;
+const CLOSE_CALL_COOLDOWN = 1.25;
+const RESPAWN_BEAM_DURATION = 1.4;
+const COMBO_CALLUPS = [
+  { threshold: 5, text: 'AMAZING!' },
+  { threshold: 10, text: 'INCREDIBLE!' },
+  { threshold: 15, text: 'UNSTOPPABLE!' }
+];
 
 // Fruit configuration
 const FRUIT_SPAWN_CHANCE = 0.002;
@@ -499,10 +508,11 @@ function renderMazeToCache() {
 // ==================== PARTICLE SYSTEM ====================
 const particles = [];
 const scorePopups = [];
+const floatingTexts = [];
 
 function createParticle(x, y, color, type = 'pellet') {
-  const count = type === 'death' ? 20 : type === 'ghost' ? 15 : 5;
-  const speed = type === 'death' ? 4 : type === 'ghost' ? 3 : 2;
+  const count = type === 'death' ? 30 : type === 'ghost' ? 15 : 5;
+  const speed = type === 'death' ? 4.5 : type === 'ghost' ? 3 : 2;
   const life = type === 'death' ? 1.5 : type === 'ghost' ? 1 : 0.5;
 
   for (let i = 0; i < count; i++) {
@@ -520,13 +530,34 @@ function createParticle(x, y, color, type = 'pellet') {
   }
 }
 
-function createScorePopup(x, y, score, color = '#fff') {
+function createScorePopup(x, y, score, color = '#fff', size = 14) {
+  const magnitudeBoost = typeof score === 'number' ? Math.min(10, Math.log10(Math.max(1, score)) * 4) : 0;
   scorePopups.push({
     x, y,
     score,
     life: 1.2,
     color,
-    vy: -2
+    vy: -2,
+    size: size + magnitudeBoost
+  });
+}
+
+function createFloatingText(x, y, text, color = '#fff', life = 1.4) {
+  floatingTexts.push({
+    x, y,
+    text,
+    life,
+    vy: -1.5,
+    color,
+    size: 16
+  });
+}
+
+function createRespawnBeam(x, y) {
+  respawnBeams.push({
+    x,
+    y,
+    time: RESPAWN_BEAM_DURATION
   });
 }
 
@@ -546,6 +577,18 @@ function updateParticles(dt) {
     p.life -= dt;
     if (p.life <= 0) scorePopups.splice(i, 1);
   }
+
+  for (let i = floatingTexts.length - 1; i >= 0; i--) {
+    const t = floatingTexts[i];
+    t.y += t.vy;
+    t.life -= dt;
+    if (t.life <= 0) floatingTexts.splice(i, 1);
+  }
+
+  for (let i = respawnBeams.length - 1; i >= 0; i--) {
+    respawnBeams[i].time -= dt;
+    if (respawnBeams[i].time <= 0) respawnBeams.splice(i, 1);
+  }
 }
 
 function drawParticles() {
@@ -563,9 +606,51 @@ function drawParticles() {
     const alpha = Math.min(1, p.life * 2);
     ctx.globalAlpha = alpha;
     ctx.fillStyle = p.color;
-    ctx.font = 'bold 14px "Press Start 2P", monospace';
+    ctx.font = `bold ${Math.max(12, p.size || 14)}px "Press Start 2P", monospace`;
     ctx.textAlign = 'center';
-    ctx.fillText(`+${p.score}`, p.x, p.y);
+    const prefix = typeof p.score === 'number' ? '+' : '';
+    ctx.fillText(`${prefix}${p.score}`, p.x, p.y);
+  });
+
+  floatingTexts.forEach(t => {
+    const alpha = Math.min(1, t.life * 1.8);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = t.color;
+    ctx.font = `bold ${t.size}px "Press Start 2P", monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillText(t.text, t.x, t.y);
+  });
+
+  ctx.globalAlpha = 1;
+}
+
+function drawRespawnBeams() {
+  respawnBeams.forEach(beam => {
+    const progress = 1 - beam.time / RESPAWN_BEAM_DURATION;
+    const alpha = Math.max(0, 1 - progress * 0.8);
+    const beamHeight = canvas.height * 0.6;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    const gradient = ctx.createLinearGradient(beam.x, beam.y - beamHeight, beam.x, beam.y + 20);
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 0)');
+    gradient.addColorStop(0.4, 'rgba(110, 245, 198, 0.15)');
+    gradient.addColorStop(0.6, 'rgba(255, 93, 217, 0.2)');
+    gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.strokeStyle = gradient;
+    ctx.lineWidth = 8 + 6 * Math.sin(progress * Math.PI * 2);
+    ctx.beginPath();
+    ctx.moveTo(beam.x, beam.y - beamHeight);
+    ctx.lineTo(beam.x, beam.y + 18);
+    ctx.stroke();
+
+    // Beam core
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(beam.x, beam.y - beamHeight);
+    ctx.lineTo(beam.x, beam.y + 18);
+    ctx.stroke();
+    ctx.restore();
   });
   ctx.globalAlpha = 1;
 }
@@ -786,6 +871,8 @@ let musicMuted = false;
 let sirenSpeed = 1;
 let singlePlayerMode = true; // false = 2P mode, true = 1P mode
 let slowMotionTimer = 0;
+let closeCallTimers = [0, 0];
+const respawnBeams = [];
 
 // ==================== GAME SETTINGS ====================
 let currentDifficulty = 'ARCADE';
@@ -1121,12 +1208,28 @@ function drawPlayers() {
       ctx.shadowBlur = 0;
     }
 
+    const angle = Math.atan2(p.dir.y, p.dir.x) || 0;
+
     // Invincibility flash
     if (p.invincible > 0 && Math.floor(Date.now() / 100) % 2) {
       ctx.globalAlpha = 0.5;
     }
 
-    const angle = Math.atan2(p.dir.y, p.dir.x) || 0;
+    // Respawn invincibility aura
+    if (p.invincible > 0) {
+      const auraPulse = 1 + Math.sin(Date.now() / 120) * 0.15;
+      ctx.save();
+      ctx.rotate(-angle); // neutralize rotation for aura symmetry
+      const gradient = ctx.createRadialGradient(0, 0, 8, 0, 0, 26 * auraPulse);
+      gradient.addColorStop(0, `rgba(255,255,255,0.35)`);
+      gradient.addColorStop(1, `${p.color}22`);
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(0, 0, (tileSize / 2 + 10) * auraPulse, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
     ctx.rotate(angle);
 
     // Glow effect
@@ -1402,6 +1505,30 @@ function drawUI() {
     ctx.font = '12px "Press Start 2P", monospace';
     ctx.textAlign = 'right';
     ctx.fillText(`${comboCount}x COMBO!`, canvas.width - 10, canvas.height - 10);
+
+    const barWidth = 180;
+    const barHeight = 10;
+    const barX = canvas.width / 2 - barWidth / 2;
+    const barY = canvas.height - 28;
+    const progress = Math.max(0, Math.min(1, comboTimer / COMBO_TIMER_DURATION));
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+    ctx.fillRect(barX, barY, barWidth, barHeight);
+
+    const gradient = ctx.createLinearGradient(barX, barY, barX + barWidth, barY);
+    gradient.addColorStop(0, '#f6d646');
+    gradient.addColorStop(1, '#ff5dd9');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(barX, barY, barWidth * progress, barHeight);
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(barX, barY, barWidth, barHeight);
+
+    ctx.fillStyle = '#111';
+    ctx.font = '9px "Press Start 2P", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${comboCount}x`, canvas.width / 2, barY - 4);
   }
 
   // Ghost multiplier when active
@@ -1458,6 +1585,7 @@ function drawUI() {
   }
 
   // Draw particles and popups
+  drawRespawnBeams();
   drawParticles();
 }
 
@@ -2032,7 +2160,7 @@ function eatPellet(player) {
 
     addScore(player, points);
     createParticle(player.x, player.y, '#f6d646', 'pellet');
-    playSound(520 + comboCount * 20, 0.04, 0.08);
+    playComboSound(comboCount);
 
     // Celebrate chain milestones with toasts and extra juice
     const milestone = COMBO_TOAST_THRESHOLDS
@@ -2043,6 +2171,11 @@ function eatPellet(player) {
       triggerRetroPulse(0.4);
       screenFlash = Math.min(1, screenFlash + 0.18);
       lastComboToast = milestone;
+
+      const callup = COMBO_CALLUPS.filter((c) => comboCount >= c.threshold).sort((a, b) => b.threshold - a.threshold)[0];
+      if (callup) {
+        createFloatingText(player.x, player.y - 30, callup.text, '#ff5dd9');
+      }
     }
 
     // Track statistics
@@ -2111,6 +2244,10 @@ function addScore(player, points) {
     highScore = totalScore;
     setLocalStorage('wackman-highscore', highScore);
   }
+
+  // Score-based rumble
+  const shakeBoost = Math.min(1.25, points * SCORE_SHAKE_SCALE);
+  screenShake = Math.max(screenShake, shakeBoost);
 
   updateHud();
 }
@@ -2194,9 +2331,7 @@ function collectPowerUp(player) {
     // Visual feedback
     createParticle(player.x, player.y, powerUpInfo.color, 'star');
     createScorePopup(player.x, player.y - 20, powerUpInfo.name, powerUpInfo.color);
-    playSound(660, 0.2, 0.1);
-    playSound(880, 0.2, 0.1);
-    playSound(1100, 0.2, 0.1);
+    playPowerUpCollectSound(powerUp.type);
     queueToast(`${powerUpInfo.name} activated`, { accent: powerUpInfo.color, variant: 'strong' });
     triggerRetroPulse(0.8);
     screenFlash = Math.min(1, screenFlash + 0.35);
@@ -2363,6 +2498,10 @@ function startLevelComplete() {
     livesLost: levelStats.livesLost
   };
 
+  playLevelClearFanfare();
+  triggerRetroPulse(0.8);
+  screenFlash = Math.min(1, screenFlash + 0.5);
+
   setState(GAME_STATE.LEVEL_COMPLETE, LEVEL_COMPLETE_DURATION);
 }
 
@@ -2399,6 +2538,9 @@ function nextLevel() {
   activePowerUps.length = 0;
   particles.length = 0;
   scorePopups.length = 0;
+  floatingTexts.length = 0;
+  respawnBeams.length = 0;
+  closeCallTimers = [0, 0];
   screenFlash = 1;
   triggerRetroPulse(1);
 
@@ -2428,6 +2570,8 @@ function update(dt) {
       lastComboToast = 0;
     }
   }
+
+  closeCallTimers = closeCallTimers.map((t) => Math.max(0, t - dt));
 
   updateParticles(dt);
 
@@ -2535,6 +2679,19 @@ function checkCollisions() {
   ghosts.forEach((g) => {
     activePlayers.forEach((p) => {
       if (!p.alive || g.eaten || g.inHouse || p.invincible > 0) return;
+      const playerIdx = players.indexOf(p);
+      const distance = Math.hypot(g.x - p.x, g.y - p.y);
+
+      if (distance < NEAR_MISS_DISTANCE &&
+          distance > tileSize / COLLISION_RADIUS_FACTOR &&
+          closeCallTimers[playerIdx] <= 0 &&
+          frightenedTimer <= 0) {
+        closeCallTimers[playerIdx] = CLOSE_CALL_COOLDOWN;
+        createScorePopup(p.x, p.y - 28, 'CLOSE CALL!', '#ff5dd9', 16);
+        playWooshSound();
+        screenShake = Math.max(screenShake, 0.35);
+      }
+
       if (collide(g, p)) {
         if (frightenedTimer > 0) {
           g.eaten = true;
@@ -2589,6 +2746,8 @@ function loseLife(deadPlayer) {
   lives -= 1;
   updateHud();
   screenShake = 1;
+  screenFlash = Math.min(1, screenFlash + 0.7);
+  triggerRetroPulse(1);
 
   // Track death statistics
   stats.totalDeaths++;
@@ -2601,6 +2760,7 @@ function loseLife(deadPlayer) {
   deadPlayer.alive = false;
   deadPlayer.deathTimer = DEATH_ANIMATION_DURATION;
   createParticle(deadPlayer.x, deadPlayer.y, deadPlayer.color, 'death');
+  createFloatingText(deadPlayer.x, deadPlayer.y - 24, 'KABOOM!', '#ff4b8b');
 
   playSound(200, 0.3, 0.3);
   playSound(150, 0.3, 0.25);
@@ -2620,7 +2780,10 @@ function resetPositions() {
   players[1] = { ...createPlayer(p2Col, playerStartRow, '#6ef5c6', ['KeyW', 'KeyA', 'KeyS', 'KeyD']), score: players[1].score };
 
   // Only set invincibility for active players
-  getActivePlayers().forEach(p => p.invincible = PLAYER_INVINCIBILITY_DURATION);
+  getActivePlayers().forEach(p => {
+    p.invincible = PLAYER_INVINCIBILITY_DURATION;
+    createRespawnBeam(p.x, p.y);
+  });
 
   ghosts.forEach((g, idx) => {
     const colors = ['#ff4b8b', '#53a4ff', '#ff8c42', '#b967ff'];
@@ -2827,6 +2990,115 @@ function playSound(frequency, duration = 0.1, gain = 0.15) {
   } catch (e) {
     console.warn(`Failed to play sound: ${e.message}`);
   }
+}
+
+function playComboSound(combo) {
+  if (musicMuted) return;
+  const scale = [523, 587, 659, 698, 784, 880, 988, 1047, 1175]; // C major-ish
+  const now = audioCtx.currentTime;
+  const note = scale[(combo - 1) % scale.length];
+  const duration = 0.09;
+
+  const osc = audioCtx.createOscillator();
+  const gainNode = audioCtx.createGain();
+  osc.type = 'triangle';
+  osc.frequency.value = note;
+  gainNode.gain.setValueAtTime(0.14 * masterVolume, now);
+  gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration);
+  osc.connect(gainNode).connect(audioCtx.destination);
+  osc.start(now);
+  osc.stop(now + duration + 0.02);
+
+  // Add harmony layers as combo climbs
+  if (combo >= 5) {
+    const osc2 = audioCtx.createOscillator();
+    const gain2 = audioCtx.createGain();
+    osc2.type = 'sine';
+    osc2.frequency.value = note * 1.5; // fifth
+    gain2.gain.setValueAtTime(0.08 * masterVolume, now + 0.02);
+    gain2.gain.exponentialRampToValueAtTime(0.001, now + duration + 0.08);
+    osc2.connect(gain2).connect(audioCtx.destination);
+    osc2.start(now + 0.02);
+    osc2.stop(now + duration + 0.08);
+  }
+
+  if (combo >= 10) {
+    [2, 4].forEach((offset, idx) => {
+      const extra = audioCtx.createOscillator();
+      const gainExtra = audioCtx.createGain();
+      extra.type = 'square';
+      extra.frequency.value = note * Math.pow(2, offset / 12); // little arpeggio
+      const start = now + 0.04 + idx * 0.02;
+      const end = start + duration;
+      gainExtra.gain.setValueAtTime(0.05 * masterVolume, start);
+      gainExtra.gain.exponentialRampToValueAtTime(0.001, end);
+      extra.connect(gainExtra).connect(audioCtx.destination);
+      extra.start(start);
+      extra.stop(end + 0.02);
+    });
+  }
+}
+
+function playWooshSound() {
+  if (musicMuted) return;
+  const now = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const gainNode = audioCtx.createGain();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(260, now);
+  osc.frequency.exponentialRampToValueAtTime(60, now + 0.28);
+  gainNode.gain.setValueAtTime(0.2 * masterVolume, now);
+  gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+  osc.connect(gainNode).connect(audioCtx.destination);
+  osc.start(now);
+  osc.stop(now + 0.32);
+}
+
+function playPowerUpCollectSound(type) {
+  if (musicMuted) return;
+  const now = audioCtx.currentTime;
+  const base = type === 'DOUBLE' ? 494 : 392;
+  const chord = [base, base * 1.25, base * 1.5, base * 2];
+  chord.forEach((freq, idx) => {
+    const osc = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+    osc.type = idx % 2 === 0 ? 'square' : 'triangle';
+    osc.frequency.value = freq;
+    const start = now + idx * 0.05;
+    const end = start + 0.18;
+    gainNode.gain.setValueAtTime(0.16 * masterVolume, start);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, end);
+    osc.connect(gainNode).connect(audioCtx.destination);
+    osc.start(start);
+    osc.stop(end + 0.02);
+  });
+}
+
+function playLevelClearFanfare() {
+  if (musicMuted) return;
+  const now = audioCtx.currentTime;
+  const melody = [
+    { freq: 523, duration: 0.16, time: 0 },
+    { freq: 659, duration: 0.16, time: 0.16 },
+    { freq: 784, duration: 0.2, time: 0.32 },
+    { freq: 988, duration: 0.24, time: 0.52 },
+    { freq: 1175, duration: 0.24, time: 0.76 },
+    { freq: 1568, duration: 0.3, time: 1.04 }
+  ];
+
+  melody.forEach(note => {
+    const osc = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+    osc.type = 'square';
+    osc.frequency.value = note.freq;
+    const start = now + note.time;
+    const end = start + note.duration;
+    gainNode.gain.setValueAtTime(0.22 * masterVolume, start);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, end);
+    osc.connect(gainNode).connect(audioCtx.destination);
+    osc.start(start);
+    osc.stop(end + 0.02);
+  });
 }
 
 /**
@@ -3250,6 +3522,9 @@ function resetGame() {
   // Clear power-ups
   activePowerUps.length = 0;
   powerUpSpawns.length = 0;
+  respawnBeams.length = 0;
+  floatingTexts.length = 0;
+  closeCallTimers = [0, 0];
 
   resetBoard();
   resetPositions();
