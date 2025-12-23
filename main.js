@@ -38,10 +38,6 @@ const FRIGHTENED_DURATION_DECREASE_PER_LEVEL = 0.5;
 const FRIGHTENED_MIN_DURATION = 4;
 const FRIGHTENED_WARNING_TIME = 2;
 
-// Slow-motion effect configuration
-const SLOWMO_DURATION = 0.6;
-const SLOWMO_FACTOR = 0.15;
-
 // Scatter/Chase mode timing
 const SCATTER_BASE_DURATION = 7;
 const SCATTER_MIN_DURATION = 3;
@@ -105,6 +101,10 @@ const COLORBLIND_GHOST_COLORS = ['#ffb000', '#648fff', '#785ef0', '#dc267f'];
 const DEFAULT_GHOST_COLORS = ['#ff4b8b', '#53a4ff', '#ff8c42', '#b967ff'];
 const SLOW_MODE_SPEED_MULTIPLIER = 0.65;
 const DEFAULT_SWIPE_DEADZONE = 30;
+
+// Frame timing configuration
+const MAX_FRAME_STEP = 1 / 60; // Fixed simulation step (~16.67ms) to avoid hitch-based speed spikes
+const MAX_ACCUMULATED_TIME = 0.25; // Cap to avoid spiral of death on long pauses
 
 // Showcase messaging for attract-mode vibes
 const ATTRACT_MESSAGES = [
@@ -232,6 +232,7 @@ function setLocalStorageJSON(key, value) {
 
 // ==================== GAME STATE ====================
 let lastTime = 0;
+let accumulatedTime = 0;
 let lives = 3;
 let level = 1;
 let highScore = getLocalStorage('wackman-highscore', 0);
@@ -261,7 +262,6 @@ if (!Number.isFinite(swipeDeadZone) || swipeDeadZone < 10) swipeDeadZone = DEFAU
 let scatterScript = [];
 let scatterPhaseIndex = 0;
 let scatterPhaseTimer = 0;
-let smoothedDt = 0;
 let levelStats = {
   pellets: 0,
   ghosts: 0,
@@ -950,7 +950,6 @@ let ghostMultiplier = 1;
 let musicMuted = false;
 let sirenSpeed = 1;
 let singlePlayerMode = true; // false = 2P mode, true = 1P mode
-let slowMotionTimer = 0;
 let closeCallTimers = [0, 0];
 const respawnBeams = [];
 
@@ -1601,36 +1600,12 @@ function drawUI() {
   ctx.textAlign = 'left';
   ctx.fillText(`LVL ${level}`, 10, canvas.height - 10);
 
-  // Combo indicator
+  // Combo indicator (text only to reduce visual clutter)
   if (comboCount > 1) {
     ctx.fillStyle = `rgba(255, 200, 50, ${Math.min(1, comboTimer)})`;
     ctx.font = '12px "Press Start 2P", monospace';
     ctx.textAlign = 'right';
     ctx.fillText(`${comboCount}x COMBO!`, canvas.width - 10, canvas.height - 10);
-
-    const barWidth = 180;
-    const barHeight = 10;
-    const barX = canvas.width / 2 - barWidth / 2;
-    const barY = canvas.height - 28;
-    const progress = Math.max(0, Math.min(1, comboTimer / COMBO_TIMER_DURATION));
-
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
-    ctx.fillRect(barX, barY, barWidth, barHeight);
-
-    const gradient = ctx.createLinearGradient(barX, barY, barX + barWidth, barY);
-    gradient.addColorStop(0, '#f6d646');
-    gradient.addColorStop(1, '#ff5dd9');
-    ctx.fillStyle = gradient;
-    ctx.fillRect(barX, barY, barWidth * progress, barHeight);
-
-    ctx.strokeStyle = 'rgba(255,255,255,0.4)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(barX, barY, barWidth, barHeight);
-
-    ctx.fillStyle = '#111';
-    ctx.font = '9px "Press Start 2P", monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(`${comboCount}x`, canvas.width / 2, barY - 4);
   }
 
   // Ghost multiplier when active
@@ -1812,8 +1787,8 @@ function movePlayer(player, dt) {
 
   // Apply SPEED power-up
   const speedMultiplier = isPowerUpActive('SPEED') ? 1.5 : 1.0;
-  const slowmoMultiplier = slowModeEnabled ? SLOW_MODE_SPEED_MULTIPLIER : 1;
-  const speed = (baseSpeed + (level - 1) * SPEED_INCREASE_PER_LEVEL) * speedMultiplier * slowmoMultiplier;
+  const slowModeMultiplier = slowModeEnabled ? SLOW_MODE_SPEED_MULTIPLIER : 1;
+  const speed = (baseSpeed + (level - 1) * SPEED_INCREASE_PER_LEVEL) * speedMultiplier * slowModeMultiplier;
 
   // Calculate tile center for snapping
   const tileCenterX = Math.floor(player.x / tileSize) * tileSize + tileSize / 2;
@@ -2825,9 +2800,6 @@ function checkCollisions() {
             stats.longestCombo = comboCount;
           }
 
-          // Trigger slow-motion effect
-          slowMotionTimer = SLOWMO_DURATION;
-
           // Activate WACKY HANDS after eating 3 ghosts in one power-up!
           if (ghostsEatenThisPowerUp === 3 && !isPowerUpActive('HANDS')) {
             activePowerUps.push({
@@ -3036,18 +3008,21 @@ function loop(timestamp) {
     const rawDt = Math.min((now - lastTime) / 1000, 0.12);
     lastTime = now;
 
-    // Exponential moving average to smooth out occasional large/small frames
-    if (smoothedDt === 0) smoothedDt = rawDt;
-    smoothedDt = rawDt * 0.25 + smoothedDt * 0.75;
-    let dt = smoothedDt;
+    // Fixed-step accumulator: processes all elapsed time in small, even slices
+    accumulatedTime = Math.min(accumulatedTime + rawDt, MAX_ACCUMULATED_TIME);
+    let steps = 0;
 
-    // Apply slow-motion effect when eating ghosts
-    if (slowMotionTimer > 0) {
-      dt *= SLOWMO_FACTOR;
-      slowMotionTimer -= dt / SLOWMO_FACTOR; // Decrement in real time
+    while (accumulatedTime >= MAX_FRAME_STEP) {
+      update(MAX_FRAME_STEP);
+      accumulatedTime -= MAX_FRAME_STEP;
+      steps += 1;
+      if (steps > 10) {
+        // Safety break to avoid spiral-of-death in extreme cases
+        accumulatedTime = 0;
+        break;
+      }
     }
 
-    update(dt);
     drawGrid();
     drawPlayers();
     drawGhosts();
