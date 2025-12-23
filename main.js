@@ -101,6 +101,12 @@ const COLORBLIND_GHOST_COLORS = ['#ffb000', '#648fff', '#785ef0', '#dc267f'];
 const DEFAULT_GHOST_COLORS = ['#ff4b8b', '#53a4ff', '#ff8c42', '#b967ff'];
 const SLOW_MODE_SPEED_MULTIPLIER = 0.65;
 const DEFAULT_SWIPE_DEADZONE = 30;
+const COMBO_TOAST_THRESHOLDS_DESC = [...COMBO_TOAST_THRESHOLDS].sort((a, b) => b - a);
+const COMBO_CALLUPS_DESC = [...COMBO_CALLUPS].sort((a, b) => b.threshold - a.threshold);
+
+// Frame timing configuration
+const MAX_FRAME_STEP = 1 / 60; // Fixed simulation step (~16.67ms) to avoid hitch-based speed spikes
+const MAX_ACCUMULATED_TIME = 0.25; // Cap to avoid spiral of death on long pauses
 
 // Frame timing configuration
 const MAX_FRAME_STEP = 1 / 60; // Fixed simulation step (~16.67ms) to avoid hitch-based speed spikes
@@ -515,6 +521,34 @@ function renderMazeToCache() {
 const particles = [];
 const scorePopups = [];
 const floatingTexts = [];
+const textSpriteCache = new Map();
+
+function getCachedTextSprite(text, size, color = '#fff', fontWeight = 'bold') {
+  const key = `${fontWeight}:${size}:${color}:${text}`;
+  if (textSpriteCache.has(key)) return textSpriteCache.get(key);
+
+  const font = `${fontWeight} ${size}px "Press Start 2P", monospace`;
+  const measureCtx = mazeCacheCtx || ctx;
+  measureCtx.font = font;
+  const metrics = measureCtx.measureText(text);
+  const padding = 8;
+  const canvasEl = document.createElement('canvas');
+  canvasEl.width = Math.ceil(metrics.width + padding * 2);
+  canvasEl.height = Math.ceil(size * 1.6 + padding * 2);
+  const cctx = canvasEl.getContext('2d');
+  cctx.font = font;
+  cctx.fillStyle = color;
+  cctx.textAlign = 'center';
+  cctx.textBaseline = 'middle';
+  cctx.fillText(text, canvasEl.width / 2, canvasEl.height / 2);
+  const sprite = {
+    canvas: canvasEl,
+    width: canvasEl.width,
+    height: canvasEl.height
+  };
+  textSpriteCache.set(key, sprite);
+  return sprite;
+}
 
 function createParticle(x, y, color, type = 'pellet') {
   const count = type === 'death' ? 30 : type === 'ghost' ? 15 : 5;
@@ -538,9 +572,10 @@ function createParticle(x, y, color, type = 'pellet') {
 
 function createScorePopup(x, y, score, color = '#fff', size = 14) {
   const magnitudeBoost = typeof score === 'number' ? Math.min(10, Math.log10(Math.max(1, score)) * 4) : 0;
+  const displayText = `${typeof score === 'number' ? '+' : ''}${score}`;
   scorePopups.push({
     x, y,
-    score,
+    score: displayText,
     life: 1.2,
     color,
     vy: -2,
@@ -629,20 +664,16 @@ function drawParticles() {
   scorePopups.forEach(p => {
     const alpha = Math.min(1, p.life * 2);
     ctx.globalAlpha = alpha;
-    ctx.fillStyle = p.color;
-    ctx.font = `bold ${Math.max(12, p.size || 14)}px "Press Start 2P", monospace`;
-    ctx.textAlign = 'center';
-    const prefix = typeof p.score === 'number' ? '+' : '';
-    ctx.fillText(`${prefix}${p.score}`, p.x, p.y);
+    const fontSize = Math.max(12, p.size || 14);
+    const sprite = getCachedTextSprite(p.score, fontSize, p.color);
+    ctx.drawImage(sprite.canvas, p.x - sprite.width / 2, p.y - sprite.height / 2);
   });
 
   floatingTexts.forEach(t => {
     const alpha = Math.min(1, t.life * 1.8);
     ctx.globalAlpha = alpha;
-    ctx.fillStyle = t.color;
-    ctx.font = `bold ${t.size}px "Press Start 2P", monospace`;
-    ctx.textAlign = 'center';
-    ctx.fillText(t.text, t.x, t.y);
+    const sprite = getCachedTextSprite(t.text, t.size, t.color);
+    ctx.drawImage(sprite.canvas, t.x - sprite.width / 2, t.y - sprite.height / 2);
   });
 
   ctx.globalAlpha = 1;
@@ -2242,16 +2273,14 @@ function eatPellet(player) {
     playComboSound(comboCount);
 
     // Celebrate chain milestones with toasts and extra juice
-    const milestone = COMBO_TOAST_THRESHOLDS
-      .filter((m) => comboCount >= m)
-      .sort((a, b) => b - a)[0];
+    const milestone = COMBO_TOAST_THRESHOLDS_DESC.find((m) => comboCount >= m);
     if (milestone && milestone > lastComboToast) {
       queueToast(`${comboCount}x chain — keep it alive!`, { variant: 'strong', accent: '#f6d646' });
       triggerRetroPulse(0.4);
       screenFlash = Math.min(1, screenFlash + 0.18);
       lastComboToast = milestone;
 
-      const callup = COMBO_CALLUPS.filter((c) => comboCount >= c.threshold).sort((a, b) => b.threshold - a.threshold)[0];
+      const callup = COMBO_CALLUPS_DESC.find((c) => comboCount >= c.threshold);
       if (callup) {
         createFloatingText(player.x, player.y - 30, callup.text, '#ff5dd9');
       }
@@ -3059,6 +3088,63 @@ function updateStartButtonLabel() {
 }
 
 // ==================== AUDIO ====================
+const audioBufferCache = new Map();
+
+function getWaveSample(type, phase) {
+  const normalizedPhase = phase % (Math.PI * 2);
+  switch (type) {
+    case 'square':
+      return Math.sign(Math.sin(normalizedPhase)) || 1;
+    case 'triangle':
+      return 2 * Math.asin(Math.sin(normalizedPhase)) / Math.PI;
+    case 'sawtooth': {
+      const frac = normalizedPhase / (Math.PI * 2);
+      return 2 * (frac - Math.floor(frac + 0.5));
+    }
+    default:
+      return Math.sin(normalizedPhase);
+  }
+}
+
+function getCachedBuffer(type, startFreq, endFreq, duration) {
+  const key = `${type}:${startFreq}:${endFreq}:${duration}`;
+  if (audioBufferCache.has(key)) return audioBufferCache.get(key);
+
+  const sr = audioCtx.sampleRate || 44100;
+  const length = Math.max(1, Math.floor(sr * duration));
+  const buffer = audioCtx.createBuffer(1, length, sr);
+  const data = buffer.getChannelData(0);
+  let phase = 0;
+  const freqDelta = endFreq - startFreq;
+
+  for (let i = 0; i < length; i++) {
+    const t = i / length;
+    const freq = startFreq + freqDelta * t;
+    phase += (2 * Math.PI * freq) / sr;
+    const envelope = Math.pow(1 - t, 2); // quick decay envelope
+    data[i] = getWaveSample(type, phase) * envelope;
+  }
+
+  audioBufferCache.set(key, buffer);
+  return buffer;
+}
+
+function playTone(frequency, duration = 0.1, gain = 0.15, type = 'square', startTime = audioCtx.currentTime, endFrequency = frequency) {
+  if (musicMuted) return;
+  try {
+    const buffer = getCachedBuffer(type, frequency, endFrequency, duration);
+    const source = audioCtx.createBufferSource();
+    const gainNode = audioCtx.createGain();
+    source.buffer = buffer;
+    source.connect(gainNode).connect(audioCtx.destination);
+    gainNode.gain.setValueAtTime(gain * masterVolume, startTime);
+    source.start(startTime);
+    source.stop(startTime + duration);
+  } catch (e) {
+    console.warn(`Failed to play cached sound: ${e.message}`);
+  }
+}
+
 /**
  * Plays a sound effect using Web Audio API
  * @param {number} frequency - Sound frequency in Hz
@@ -3066,22 +3152,7 @@ function updateStartButtonLabel() {
  * @param {number} gain - Volume (0-1)
  */
 function playSound(frequency, duration = 0.1, gain = 0.15) {
-  if (musicMuted) return;
-  try {
-    const now = audioCtx.currentTime;
-    const oscillator = audioCtx.createOscillator();
-    const gainNode = audioCtx.createGain();
-    oscillator.frequency.value = frequency;
-    oscillator.type = 'square';
-    // Apply master volume to gain
-    gainNode.gain.setValueAtTime(gain * masterVolume, now);
-    gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration);
-    oscillator.connect(gainNode).connect(audioCtx.destination);
-    oscillator.start(now);
-    oscillator.stop(now + duration + 0.05);
-  } catch (e) {
-    console.warn(`Failed to play sound: ${e.message}`);
-  }
+  playTone(frequency, duration, gain, 'square');
 }
 
 function playComboSound(combo) {
@@ -3093,42 +3164,17 @@ function playComboSound(combo) {
   const note = scale[(combo - 1) % scale.length];
   const duration = 0.09;
 
-  const osc = audioCtx.createOscillator();
-  const gainNode = audioCtx.createGain();
-  osc.type = 'triangle';
-  osc.frequency.value = note;
-  gainNode.gain.setValueAtTime(0.14 * masterVolume, now);
-  gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration);
-  osc.connect(gainNode).connect(audioCtx.destination);
-  osc.start(now);
-  osc.stop(now + duration + 0.02);
+  playTone(note, duration, 0.14, 'triangle', now);
 
   // Add harmony layers as combo climbs
   if (combo >= 5) {
-    const osc2 = audioCtx.createOscillator();
-    const gain2 = audioCtx.createGain();
-    osc2.type = 'sine';
-    osc2.frequency.value = note * 1.5; // fifth
-    gain2.gain.setValueAtTime(0.08 * masterVolume, now + 0.02);
-    gain2.gain.exponentialRampToValueAtTime(0.001, now + duration + 0.08);
-    osc2.connect(gain2).connect(audioCtx.destination);
-    osc2.start(now + 0.02);
-    osc2.stop(now + duration + 0.08);
+    playTone(note * 1.5, duration + 0.06, 0.08, 'sine', now + 0.02);
   }
 
   if (combo >= 10) {
     [2, 4].forEach((offset, idx) => {
-      const extra = audioCtx.createOscillator();
-      const gainExtra = audioCtx.createGain();
-      extra.type = 'square';
-      extra.frequency.value = note * Math.pow(2, offset / 12); // little arpeggio
       const start = now + 0.04 + idx * 0.02;
-      const end = start + duration;
-      gainExtra.gain.setValueAtTime(0.05 * masterVolume, start);
-      gainExtra.gain.exponentialRampToValueAtTime(0.001, end);
-      extra.connect(gainExtra).connect(audioCtx.destination);
-      extra.start(start);
-      extra.stop(end + 0.02);
+      playTone(note * Math.pow(2, offset / 12), duration, 0.05, 'square', start);
     });
   }
 }
@@ -3136,16 +3182,7 @@ function playComboSound(combo) {
 function playWooshSound() {
   if (musicMuted) return;
   const now = audioCtx.currentTime;
-  const osc = audioCtx.createOscillator();
-  const gainNode = audioCtx.createGain();
-  osc.type = 'sawtooth';
-  osc.frequency.setValueAtTime(260, now);
-  osc.frequency.exponentialRampToValueAtTime(60, now + 0.28);
-  gainNode.gain.setValueAtTime(0.2 * masterVolume, now);
-  gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
-  osc.connect(gainNode).connect(audioCtx.destination);
-  osc.start(now);
-  osc.stop(now + 0.32);
+  playTone(260, 0.32, 0.2, 'sawtooth', now, 60);
 }
 
 function playPowerUpCollectSound(type) {
@@ -3154,17 +3191,8 @@ function playPowerUpCollectSound(type) {
   const base = type === 'DOUBLE' ? 494 : 392;
   const chord = [base, base * 1.25, base * 1.5, base * 2];
   chord.forEach((freq, idx) => {
-    const osc = audioCtx.createOscillator();
-    const gainNode = audioCtx.createGain();
-    osc.type = idx % 2 === 0 ? 'square' : 'triangle';
-    osc.frequency.value = freq;
     const start = now + idx * 0.05;
-    const end = start + 0.18;
-    gainNode.gain.setValueAtTime(0.16 * masterVolume, start);
-    gainNode.gain.exponentialRampToValueAtTime(0.001, end);
-    osc.connect(gainNode).connect(audioCtx.destination);
-    osc.start(start);
-    osc.stop(end + 0.02);
+    playTone(freq, 0.18, 0.16, idx % 2 === 0 ? 'square' : 'triangle', start);
   });
 }
 
@@ -3181,17 +3209,8 @@ function playLevelClearFanfare() {
   ];
 
   melody.forEach(note => {
-    const osc = audioCtx.createOscillator();
-    const gainNode = audioCtx.createGain();
-    osc.type = 'square';
-    osc.frequency.value = note.freq;
     const start = now + note.time;
-    const end = start + note.duration;
-    gainNode.gain.setValueAtTime(0.22 * masterVolume, start);
-    gainNode.gain.exponentialRampToValueAtTime(0.001, end);
-    osc.connect(gainNode).connect(audioCtx.destination);
-    osc.start(start);
-    osc.stop(end + 0.02);
+    playTone(note.freq, note.duration, 0.22, 'square', start);
   });
 }
 
@@ -3212,21 +3231,8 @@ function playGhostEatenSound() {
     ];
 
     notes.forEach(note => {
-      const oscillator = audioCtx.createOscillator();
-      const gainNode = audioCtx.createGain();
-
-      oscillator.frequency.value = note.freq;
-      oscillator.type = 'sine'; // Sine wave for smoother arcade sound
-
       const startTime = now + note.time;
-      const endTime = startTime + note.duration;
-
-      gainNode.gain.setValueAtTime(0.25 * masterVolume, startTime);
-      gainNode.gain.exponentialRampToValueAtTime(0.001, endTime);
-
-      oscillator.connect(gainNode).connect(audioCtx.destination);
-      oscillator.start(startTime);
-      oscillator.stop(endTime + 0.01);
+      playTone(note.freq, note.duration, 0.25, 'sine', startTime);
     });
   } catch (e) {
     console.warn(`Failed to play ghost eaten sound: ${e.message}`);
@@ -3243,17 +3249,8 @@ function playReadyJingle() {
     { freq: 1047, duration: 0.2, time: 0.38 },
   ];
   notes.forEach(note => {
-    const osc = audioCtx.createOscillator();
-    const gainNode = audioCtx.createGain();
-    osc.type = 'square';
-    osc.frequency.value = note.freq;
     const start = now + note.time;
-    const end = start + note.duration;
-    gainNode.gain.setValueAtTime(0.18 * masterVolume, start);
-    gainNode.gain.exponentialRampToValueAtTime(0.001, end);
-    osc.connect(gainNode).connect(audioCtx.destination);
-    osc.start(start);
-    osc.stop(end + 0.02);
+    playTone(note.freq, note.duration, 0.18, 'square', start);
   });
 }
 
@@ -3269,17 +3266,8 @@ function playGameOverJingle() {
     { freq: 587, duration: 0.35, time: 1.2 },
   ];
   notes.forEach(note => {
-    const osc = audioCtx.createOscillator();
-    const gainNode = audioCtx.createGain();
-    osc.type = 'square';
-    osc.frequency.value = note.freq;
     const start = now + note.time;
-    const end = start + note.duration;
-    gainNode.gain.setValueAtTime(0.22 * masterVolume, start);
-    gainNode.gain.exponentialRampToValueAtTime(0.001, end);
-    osc.connect(gainNode).connect(audioCtx.destination);
-    osc.start(start);
-    osc.stop(end + 0.02);
+    playTone(note.freq, note.duration, 0.22, 'square', start);
   });
 }
 
@@ -3292,17 +3280,8 @@ function playExtraLifeJingle() {
     { freq: 1319, duration: 0.18, time: 0.28 },
   ];
   notes.forEach(note => {
-    const osc = audioCtx.createOscillator();
-    const gainNode = audioCtx.createGain();
-    osc.type = 'triangle';
-    osc.frequency.value = note.freq;
     const start = now + note.time;
-    const end = start + note.duration;
-    gainNode.gain.setValueAtTime(0.2 * masterVolume, start);
-    gainNode.gain.exponentialRampToValueAtTime(0.001, end);
-    osc.connect(gainNode).connect(audioCtx.destination);
-    osc.start(start);
-    osc.stop(end + 0.02);
+    playTone(note.freq, note.duration, 0.2, 'triangle', start);
   });
 }
 
