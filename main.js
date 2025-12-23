@@ -108,10 +108,6 @@ const COMBO_CALLUPS_DESC = [...COMBO_CALLUPS].sort((a, b) => b.threshold - a.thr
 const MAX_FRAME_STEP = 1 / 60; // Fixed simulation step (~16.67ms) to avoid hitch-based speed spikes
 const MAX_ACCUMULATED_TIME = 0.25; // Cap to avoid spiral of death on long pauses
 
-// Frame timing configuration
-const MAX_FRAME_STEP = 1 / 60; // Fixed simulation step (~16.67ms) to avoid hitch-based speed spikes
-const MAX_ACCUMULATED_TIME = 0.25; // Cap to avoid spiral of death on long pauses
-
 // Showcase messaging for attract-mode vibes
 const ATTRACT_MESSAGES = [
   { title: 'NEON MAZE SHOWDOWN', subtitle: 'Swipe or press start to dive in' },
@@ -515,6 +511,18 @@ function renderMazeToCache() {
       }
     });
   });
+}
+
+function ensureMazeCache() {
+  if (!mazeCache || !mazeCacheCtx) {
+    try {
+      initMazeCache();
+    } catch (e) {
+      console.warn('Failed to init maze cache, drawing direct each frame', e);
+      mazeCache = null;
+      mazeCacheCtx = null;
+    }
+  }
 }
 
 // ==================== PARTICLE SYSTEM ====================
@@ -1168,9 +1176,23 @@ function drawGrid() {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
 
+  ensureMazeCache();
+
   // Draw cached maze (walls) - much faster than redrawing every frame
   if (mazeCache) {
     ctx.drawImage(mazeCache, 0, 0);
+  } else {
+    // Fallback: draw walls directly if cache failed
+    layout.forEach((row, y) => {
+      [...row].forEach((cell, x) => {
+        if (cell === 'W') {
+          const px = x * tileSize;
+          const py = y * tileSize;
+          ctx.fillStyle = '#1a1a3d';
+          ctx.fillRect(px, py, tileSize, tileSize);
+        }
+      });
+    });
   }
 
   const nowMs = frameTimeMs;
