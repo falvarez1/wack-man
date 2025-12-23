@@ -540,8 +540,9 @@ function getCachedTextSprite(text, size, color = '#fff', fontWeight = 'bold') {
   if (textSpriteCache.has(key)) return textSpriteCache.get(key);
 
   const font = `${fontWeight} ${size}px "Press Start 2P", monospace`;
-  ctx.font = font;
-  const metrics = ctx.measureText(text);
+  const measureCtx = mazeCacheCtx || ctx;
+  measureCtx.font = font;
+  const metrics = measureCtx.measureText(text);
   const padding = 8;
   const canvasEl = document.createElement('canvas');
   canvasEl.width = Math.ceil(metrics.width + padding * 2);
@@ -1179,22 +1180,24 @@ function drawGrid() {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
 
-  // Draw walls directly (avoid cache issues)
-  layout.forEach((row, y) => {
-    [...row].forEach((cell, x) => {
-      if (cell === 'W') {
-        const px = x * tileSize;
-        const py = y * tileSize;
-        ctx.fillStyle = '#1a1a3d';
-        ctx.fillRect(px, py, tileSize, tileSize);
+  ensureMazeCache();
 
-        // Simple inner glow
-        ctx.strokeStyle = 'rgba(14, 243, 255, 0.15)';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(px + 3, py + 3, tileSize - 6, tileSize - 6);
-      }
+  // Draw cached maze (walls) - much faster than redrawing every frame
+  if (mazeCache) {
+    ctx.drawImage(mazeCache, 0, 0);
+  } else {
+    // Fallback: draw walls directly if cache failed
+    layout.forEach((row, y) => {
+      [...row].forEach((cell, x) => {
+        if (cell === 'W') {
+          const px = x * tileSize;
+          const py = y * tileSize;
+          ctx.fillStyle = '#1a1a3d';
+          ctx.fillRect(px, py, tileSize, tileSize);
+        }
+      });
     });
-  });
+  }
 
   const nowMs = frameTimeMs;
 
