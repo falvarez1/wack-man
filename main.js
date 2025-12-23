@@ -258,6 +258,7 @@ if (!Number.isFinite(swipeDeadZone) || swipeDeadZone < 10) swipeDeadZone = DEFAU
 let scatterScript = [];
 let scatterPhaseIndex = 0;
 let scatterPhaseTimer = 0;
+let smoothedDt = 0;
 let levelStats = {
   pellets: 0,
   ghosts: 0,
@@ -938,6 +939,7 @@ let musicInterval;
 let sirenInterval;
 let frightenedInterval;
 let currentMusicState = null;
+let lastComboSoundTime = 0;
 
 // ==================== ENTITY CREATION ====================
 /**
@@ -2571,7 +2573,9 @@ function update(dt) {
     }
   }
 
-  closeCallTimers = closeCallTimers.map((t) => Math.max(0, t - dt));
+  for (let i = 0; i < closeCallTimers.length; i++) {
+    closeCallTimers[i] = Math.max(0, closeCallTimers[i] - dt);
+  }
 
   updateParticles(dt);
 
@@ -2921,8 +2925,13 @@ function spawnFruit() {
 function loop(timestamp) {
   try {
     if (!lastTime) lastTime = timestamp;
-    let dt = Math.min((timestamp - lastTime) / 1000, 0.1);
+    const rawDt = Math.min((timestamp - lastTime) / 1000, 0.12);
     lastTime = timestamp;
+
+    // Exponential moving average to smooth out occasional large/small frames
+    if (smoothedDt === 0) smoothedDt = rawDt;
+    smoothedDt = rawDt * 0.25 + smoothedDt * 0.75;
+    let dt = smoothedDt;
 
     // Apply slow-motion effect when eating ghosts
     if (slowMotionTimer > 0) {
@@ -2994,8 +3003,10 @@ function playSound(frequency, duration = 0.1, gain = 0.15) {
 
 function playComboSound(combo) {
   if (musicMuted) return;
-  const scale = [523, 587, 659, 698, 784, 880, 988, 1047, 1175]; // C major-ish
   const now = audioCtx.currentTime;
+  if (now - lastComboSoundTime < 0.05) return;
+  lastComboSoundTime = now;
+  const scale = [523, 587, 659, 698, 784, 880, 988, 1047, 1175]; // C major-ish
   const note = scale[(combo - 1) % scale.length];
   const duration = 0.09;
 
