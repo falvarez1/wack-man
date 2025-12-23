@@ -18,6 +18,7 @@
 </head>
 <body>
   <div class="hud">
+    <button id="hud-toggle" class="hud-toggle" aria-label="Hide game options" aria-expanded="true" type="button">🎮</button>
     <div class="title-container">
       <div class="title">WACK-MAN</div>
       <div class="subtitle">Neon Maze Showdown</div>
@@ -61,6 +62,9 @@
   </div>
   <div class="canvas-wrap">
     <canvas id="game" width="672" height="720" aria-label="Game canvas" role="application"></canvas>
+  </div>
+  <div id="touch-pad" class="touch-pad" aria-label="Swipe to move your character">
+    <span class="touch-hint">Swipe here to move</span>
   </div>
   <div id="settings-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-title" aria-hidden="true">
     <div class="modal-content">

@@ -130,6 +130,62 @@ body::after {
   background: linear-gradient(90deg, transparent, rgba(110, 245, 198, 0.3), transparent);
 }
 
+.hud-toggle {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 42px;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  border: 1px solid rgba(110, 245, 198, 0.45);
+  background: linear-gradient(135deg, #1a1a3a, #0f1228);
+  color: var(--accent-2);
+  box-shadow:
+    0 8px 18px rgba(0, 0, 0, 0.35),
+    0 0 16px rgba(110, 245, 198, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  z-index: 2;
+}
+
+.hud-toggle:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent-2);
+  box-shadow:
+    0 10px 20px rgba(0, 0, 0, 0.4),
+    0 0 20px rgba(110, 245, 198, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.hud-toggle:active {
+  transform: translateY(0);
+}
+
+.hud.hud-collapsed {
+  padding-top: 18px;
+  padding-bottom: 14px;
+}
+
+.hud.hud-collapsed .title-container,
+.hud.hud-collapsed .high-score-display,
+.hud.hud-collapsed .controls,
+.hud.hud-collapsed .actions button:not(#start),
+.hud.hud-collapsed .control-tip {
+  display: none;
+}
+
+.hud.hud-collapsed .stats {
+  margin-bottom: 10px;
+}
+
+.hud.hud-collapsed .actions {
+  justify-content: center;
+}
+
 .hud.compact {
   padding: 12px 14px;
   width: min(520px, 94vw);
@@ -293,6 +349,20 @@ body::after {
 
 .lives-box {
   border-color: rgba(255, 75, 139, 0.2);
+}
+
+#lives {
+  display: flex;
+  gap: 6px;
+  min-height: 20px;
+  align-items: center;
+  justify-content: center;
+}
+
+.life-icon {
+  font-size: 14px;
+  line-height: 1;
+  text-shadow: 0 0 10px rgba(255, 75, 139, 0.5);
 }
 
 .actions {
@@ -906,6 +976,8 @@ button:active {
 @media (max-width: 720px) {
   body {
     padding: 8px 8px 14px;
+    justify-content: center;
+    gap: 10px;
   }
 
   .hud {
@@ -913,6 +985,12 @@ button:active {
     border-radius: 14px;
     width: 100%;
     max-width: 720px;
+    margin-top: 4px;
+  }
+
+  .hud.hud-collapsed {
+    padding-top: 16px;
+    padding-bottom: 12px;
   }
 
   .title {
@@ -944,6 +1022,10 @@ button:active {
     margin: 8px 0;
   }
 
+  #lives {
+    gap: 4px;
+  }
+
   .stat-box {
     padding: 8px 10px;
     min-width: 76px;
@@ -960,7 +1042,8 @@ button:active {
   }
 
   .canvas-wrap {
-    margin-top: 12px;
+    margin-top: auto;
+    margin-bottom: auto;
     padding: 12px;
     border-radius: 14px;
     max-width: 100%;
@@ -985,6 +1068,12 @@ button:active {
   .btn-difficulty {
     font-size: 10px;
     min-width: 52px;
+  }
+
+  .touch-pad {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
   }
 
   .volume-control {
@@ -1057,6 +1146,31 @@ button:focus-visible {
 canvas:focus-visible {
   outline: 3px solid var(--accent-2);
   outline-offset: 4px;
+}
+
+.touch-pad {
+  display: none;
+  width: min(96vw, 880px);
+  margin-top: 12px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 2px dashed rgba(110, 245, 198, 0.25);
+  background:
+    linear-gradient(135deg, rgba(110, 245, 198, 0.08), rgba(255, 75, 139, 0.08)),
+    rgba(10, 10, 24, 0.8);
+  color: rgba(255, 255, 255, 0.8);
+  text-align: center;
+  letter-spacing: 1px;
+  box-shadow:
+    0 15px 40px rgba(0, 0, 0, 0.45),
+    0 0 20px rgba(110, 245, 198, 0.08);
+  user-select: none;
+  touch-action: none;
+}
+
+.touch-hint {
+  font-size: 10px;
+  opacity: 0.75;
 }
 
 /* Reduced motion support */
