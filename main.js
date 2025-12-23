@@ -485,8 +485,12 @@ function initMazeCache() {
 function renderMazeToCache() {
   if (!mazeCacheCtx) return;
 
-  // Clear the cache
   mazeCacheCtx.clearRect(0, 0, mazeCache.width, mazeCache.height);
+  drawMazeWalls(mazeCacheCtx);
+}
+
+function drawMazeWalls(targetCtx) {
+  if (!targetCtx) return;
 
   // Draw walls to cache (without animations)
   layout.forEach((row, y) => {
@@ -495,23 +499,23 @@ function renderMazeToCache() {
       const py = y * tileSize;
       if (cell === 'W') {
         // Wall base
-        mazeCacheCtx.fillStyle = '#1a1a3d';
-        mazeCacheCtx.fillRect(px, py, tileSize, tileSize);
+        targetCtx.fillStyle = '#1a1a3d';
+        targetCtx.fillRect(px, py, tileSize, tileSize);
 
         // Inner glow (static)
-        const gradient = mazeCacheCtx.createRadialGradient(
+        const gradient = targetCtx.createRadialGradient(
           px + tileSize/2, py + tileSize/2, 0,
           px + tileSize/2, py + tileSize/2, tileSize
         );
         gradient.addColorStop(0, 'rgba(30, 60, 120, 0.3)');
         gradient.addColorStop(1, 'rgba(10, 10, 30, 0)');
-        mazeCacheCtx.fillStyle = gradient;
-        mazeCacheCtx.fillRect(px, py, tileSize, tileSize);
+        targetCtx.fillStyle = gradient;
+        targetCtx.fillRect(px, py, tileSize, tileSize);
 
         // Static border glow (use average alpha)
-        mazeCacheCtx.strokeStyle = 'rgba(14, 243, 255, 0.15)';
-        mazeCacheCtx.lineWidth = 1;
-        mazeCacheCtx.strokeRect(px + 3, py + 3, tileSize - 6, tileSize - 6);
+        targetCtx.strokeStyle = 'rgba(14, 243, 255, 0.15)';
+        targetCtx.lineWidth = 1;
+        targetCtx.strokeRect(px + 3, py + 3, tileSize - 6, tileSize - 6);
       }
     });
   });
@@ -534,15 +538,16 @@ const particles = [];
 const scorePopups = [];
 const floatingTexts = [];
 const textSpriteCache = new Map();
+let pelletSprite = null;
+let powerPelletSprite = null;
 
 function getCachedTextSprite(text, size, color = '#fff', fontWeight = 'bold') {
   const key = `${fontWeight}:${size}:${color}:${text}`;
   if (textSpriteCache.has(key)) return textSpriteCache.get(key);
 
   const font = `${fontWeight} ${size}px "Press Start 2P", monospace`;
-  const measureCtx = mazeCacheCtx || ctx;
-  measureCtx.font = font;
-  const metrics = measureCtx.measureText(text);
+  ctx.font = font;
+  const metrics = ctx.measureText(text);
   const padding = 8;
   const canvasEl = document.createElement('canvas');
   canvasEl.width = Math.ceil(metrics.width + padding * 2);
@@ -560,6 +565,55 @@ function getCachedTextSprite(text, size, color = '#fff', fontWeight = 'bold') {
   };
   textSpriteCache.set(key, sprite);
   return sprite;
+}
+
+function createDotSprite(radius, color, shadowBlur) {
+  const diameter = radius * 2;
+  const padding = shadowBlur * 2;
+  const size = Math.ceil(diameter + padding * 2);
+  const buffer = document.createElement('canvas');
+  buffer.width = size;
+  buffer.height = size;
+  const bctx = buffer.getContext('2d');
+  bctx.fillStyle = color;
+  bctx.shadowColor = color;
+  bctx.shadowBlur = shadowBlur;
+  bctx.beginPath();
+  const center = size / 2;
+  bctx.arc(center, center, radius, 0, Math.PI * 2);
+  bctx.fill();
+  return { canvas: buffer, radius, width: size, height: size };
+}
+
+function ensurePelletSprites() {
+  if (!pelletSprite) {
+    pelletSprite = createDotSprite(3, '#f6d646', 4);
+  }
+  if (!powerPelletSprite) {
+    powerPelletSprite = createDotSprite(6, '#6ef5c6', 10);
+  }
+}
+
+let cachesWarmed = false;
+function warmCommonCaches() {
+  if (cachesWarmed) return;
+  cachesWarmed = true;
+  ensurePelletSprites();
+
+  // Pre-bake frequent floating text to avoid per-frame text measurement on first use
+  COMBO_CALLUPS.forEach((callup) => {
+    getCachedTextSprite(callup.text, 16, '#ff5dd9');
+  });
+  getCachedTextSprite('READY!', 24, '#f6d646');
+  getCachedTextSprite('PAUSED', 24, '#f6d646');
+}
+
+if (typeof document !== 'undefined') {
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(warmCommonCaches).catch(() => warmCommonCaches());
+  } else {
+    warmCommonCaches();
+  }
 }
 
 function createParticle(x, y, color, type = 'pellet') {
@@ -1180,26 +1234,16 @@ function drawGrid() {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
 
+  // Prefer cached maze walls on capable devices; fall back to direct draw if cache missing
   ensureMazeCache();
-
-  // Draw cached maze (walls) - much faster than redrawing every frame
   if (mazeCache) {
     ctx.drawImage(mazeCache, 0, 0);
   } else {
-    // Fallback: draw walls directly if cache failed
-    layout.forEach((row, y) => {
-      [...row].forEach((cell, x) => {
-        if (cell === 'W') {
-          const px = x * tileSize;
-          const py = y * tileSize;
-          ctx.fillStyle = '#1a1a3d';
-          ctx.fillRect(px, py, tileSize, tileSize);
-        }
-      });
-    });
+    drawMazeWalls(ctx);
   }
 
   const nowMs = frameTimeMs;
+  ensurePelletSprites();
 
   // Draw animated elements that aren't cached
   // Ghost house gate (animated)
@@ -1216,29 +1260,57 @@ function drawGrid() {
   });
 
   // Draw pellets with subtle animation
+  const pelletBaseRadius = pelletSprite?.radius || 3;
   pelletRenderList.forEach((pellet) => {
     if (!pellets.has(pellet.key)) return;
     const pulse = 1 + Math.sin(nowMs / 500 + pellet.phase) * 0.1;
-    ctx.fillStyle = '#f6d646';
-    ctx.shadowColor = '#f6d646';
-    ctx.shadowBlur = 4;
-    ctx.beginPath();
-    ctx.arc(pellet.x, pellet.y, 3 * pulse, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.shadowBlur = 0;
+    if (pelletSprite) {
+      const scale = (3 * pulse) / pelletBaseRadius;
+      const drawW = pelletSprite.width * scale;
+      const drawH = pelletSprite.height * scale;
+      ctx.drawImage(
+        pelletSprite.canvas,
+        pellet.x - drawW / 2,
+        pellet.y - drawH / 2,
+        drawW,
+        drawH
+      );
+    } else {
+      ctx.fillStyle = '#f6d646';
+      ctx.shadowColor = '#f6d646';
+      ctx.shadowBlur = 4;
+      ctx.beginPath();
+      ctx.arc(pellet.x, pellet.y, 3 * pulse, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
   });
 
   // Draw power pellets with strong pulse
   const powerPulse = 5 + Math.sin(nowMs / 150) * 3;
+  const powerBaseRadius = powerPelletSprite?.radius || 6;
   powerPelletRenderList.forEach((pellet) => {
     if (!powerPellets.has(pellet.key)) return;
-    ctx.fillStyle = '#6ef5c6';
-    ctx.shadowColor = '#6ef5c6';
-    ctx.shadowBlur = 15;
-    ctx.beginPath();
-    ctx.arc(pellet.x, pellet.y, powerPulse, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.shadowBlur = 0;
+    if (powerPelletSprite) {
+      const scale = powerPulse / powerBaseRadius;
+      const drawW = powerPelletSprite.width * scale;
+      const drawH = powerPelletSprite.height * scale;
+      ctx.drawImage(
+        powerPelletSprite.canvas,
+        pellet.x - drawW / 2,
+        pellet.y - drawH / 2,
+        drawW,
+        drawH
+      );
+    } else {
+      ctx.fillStyle = '#6ef5c6';
+      ctx.shadowColor = '#6ef5c6';
+      ctx.shadowBlur = 15;
+      ctx.beginPath();
+      ctx.arc(pellet.x, pellet.y, powerPulse, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
   });
 
   // Draw fruits
