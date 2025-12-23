@@ -38,10 +38,6 @@ const FRIGHTENED_DURATION_DECREASE_PER_LEVEL = 0.5;
 const FRIGHTENED_MIN_DURATION = 4;
 const FRIGHTENED_WARNING_TIME = 2;
 
-// Slow-motion effect configuration
-const SLOWMO_DURATION = 0.6;
-const SLOWMO_FACTOR = 0.15;
-
 // Scatter/Chase mode timing
 const SCATTER_BASE_DURATION = 7;
 const SCATTER_MIN_DURATION = 3;
@@ -954,7 +950,6 @@ let ghostMultiplier = 1;
 let musicMuted = false;
 let sirenSpeed = 1;
 let singlePlayerMode = true; // false = 2P mode, true = 1P mode
-let slowMotionTimer = 0;
 let closeCallTimers = [0, 0];
 const respawnBeams = [];
 
@@ -1792,8 +1787,8 @@ function movePlayer(player, dt) {
 
   // Apply SPEED power-up
   const speedMultiplier = isPowerUpActive('SPEED') ? 1.5 : 1.0;
-  const slowmoMultiplier = slowModeEnabled ? SLOW_MODE_SPEED_MULTIPLIER : 1;
-  const speed = (baseSpeed + (level - 1) * SPEED_INCREASE_PER_LEVEL) * speedMultiplier * slowmoMultiplier;
+  const slowModeMultiplier = slowModeEnabled ? SLOW_MODE_SPEED_MULTIPLIER : 1;
+  const speed = (baseSpeed + (level - 1) * SPEED_INCREASE_PER_LEVEL) * speedMultiplier * slowModeMultiplier;
 
   // Calculate tile center for snapping
   const tileCenterX = Math.floor(player.x / tileSize) * tileSize + tileSize / 2;
@@ -2805,9 +2800,6 @@ function checkCollisions() {
             stats.longestCombo = comboCount;
           }
 
-          // Trigger slow-motion effect
-          slowMotionTimer = SLOWMO_DURATION;
-
           // Activate WACKY HANDS after eating 3 ghosts in one power-up!
           if (ghostsEatenThisPowerUp === 3 && !isPowerUpActive('HANDS')) {
             activePowerUps.push({
@@ -3021,15 +3013,7 @@ function loop(timestamp) {
     let steps = 0;
 
     while (accumulatedTime >= MAX_FRAME_STEP) {
-      let step = MAX_FRAME_STEP;
-
-      // Apply slow-motion effect when eating ghosts (scales simulation step, not accumulator)
-      if (slowMotionTimer > 0) {
-        step *= SLOWMO_FACTOR;
-        slowMotionTimer = Math.max(0, slowMotionTimer - step / SLOWMO_FACTOR); // Decrement in real time
-      }
-
-      update(step);
+      update(MAX_FRAME_STEP);
       accumulatedTime -= MAX_FRAME_STEP;
       steps += 1;
       if (steps > 10) {
