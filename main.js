@@ -675,13 +675,14 @@ function createFloatingText(x, y, text, color = '#fff', life = 1.4) {
 }
 
 function createRespawnBeam(x, y) {
-  const beamHeight = canvas.height * 0.6;
+  const startY = tileSize; // Start the bolt near the top of the maze
+  const beamHeight = Math.max(y - startY, canvas.height * 0.4);
   const segmentCount = RESPAWN_BEAM_SEGMENTS;
   const verticalStep = beamHeight / segmentCount;
   const segments = [];
 
   let currentX = x;
-  let currentY = y - beamHeight;
+  let currentY = startY;
   segments.push({ x: currentX, y: currentY });
 
   for (let i = 0; i < segmentCount; i++) {
@@ -694,10 +695,13 @@ function createRespawnBeam(x, y) {
   respawnBeams.push({
     x,
     y,
+    startY,
     time: RESPAWN_BEAM_DURATION,
     height: beamHeight,
     segments
   });
+
+  playLightningStrike();
 }
 
 function updateParticles(dt) {
@@ -764,10 +768,11 @@ function drawRespawnBeams() {
     const progress = 1 - beam.time / RESPAWN_BEAM_DURATION;
     const alpha = Math.max(0, 1 - progress * 0.8);
     const beamHeight = beam.height || canvas.height * 0.6;
+    const startY = beam.startY ?? (beam.y - beamHeight);
     const jitterPhase = frameTimeMs / 30;
     ctx.save();
     ctx.globalAlpha = alpha;
-    const gradient = ctx.createLinearGradient(beam.x, beam.y - beamHeight, beam.x, beam.y + 20);
+    const gradient = ctx.createLinearGradient(beam.x, startY, beam.x, beam.y + 20);
     gradient.addColorStop(0, 'rgba(255, 255, 255, 0)');
     gradient.addColorStop(0.4, 'rgba(110, 245, 198, 0.15)');
     gradient.addColorStop(0.6, 'rgba(255, 93, 217, 0.2)');
@@ -781,7 +786,7 @@ function drawRespawnBeams() {
         y: segment.y
       };
     }) || [
-      { x: beam.x, y: beam.y - beamHeight },
+      { x: beam.x, y: startY },
       { x: beam.x, y: beam.y }
     ];
 
@@ -1805,7 +1810,6 @@ function drawUI() {
   }
 
   // Draw particles and popups
-  drawRespawnBeams();
   drawParticles();
 }
 
@@ -3165,6 +3169,7 @@ function loop(timestamp) {
     }
 
     drawGrid();
+    drawRespawnBeams();
     drawPlayers();
     drawGhosts();
     drawUI();
@@ -3372,6 +3377,15 @@ function playGhostEatenSound() {
   } catch (e) {
     console.warn(`Failed to play ghost eaten sound: ${e.message}`);
   }
+}
+
+function playLightningStrike() {
+  if (musicMuted) return;
+  const now = audioCtx.currentTime;
+
+  playTone(80, 0.35, 0.25, 'sawtooth', now);
+  playTone(320, 0.22, 0.2, 'square', now + 0.02);
+  playTone(1200, 0.08, 0.16, 'triangle', now + 0.04);
 }
 
 function playReadyJingle() {
