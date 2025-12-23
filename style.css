@@ -906,6 +906,14 @@ button:active {
   margin-bottom: 8px;
 }
 
+.setting-row-action {
+  justify-content: space-between;
+}
+
+.setting-row-action .btn-difficulty {
+  min-width: 96px;
+}
+
 .setting-title {
   display: block;
   font-size: 11px;

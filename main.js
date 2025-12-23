@@ -64,6 +64,7 @@ const RESPAWN_BEAM_DURATION = 1.4;
 const RESPAWN_BEAM_SEGMENTS = 8;
 const RESPAWN_BEAM_SWAY = 16;
 const RESPAWN_BEAM_JITTER = 6;
+const RESPAWN_BEAM_FOOT_LIFT = 14;
 const COMBO_CALLUPS = [
   { threshold: 5, text: 'AMAZING!' },
   { threshold: 10, text: 'INCREDIBLE!' },
@@ -675,8 +676,9 @@ function createFloatingText(x, y, text, color = '#fff', life = 1.4) {
 }
 
 function createRespawnBeam(x, y) {
-  const startY = tileSize; // Start the bolt near the top of the maze
-  const beamHeight = Math.max(y - startY, canvas.height * 0.4);
+  const startY = Math.max(0, tileSize - 20); // Start the bolt slightly higher near the top of the maze
+  const endY = Math.max(tileSize, y - RESPAWN_BEAM_FOOT_LIFT);
+  const beamHeight = Math.max(endY - startY, canvas.height * 0.4);
   const segmentCount = RESPAWN_BEAM_SEGMENTS;
   const verticalStep = beamHeight / segmentCount;
   const segments = [];
@@ -696,6 +698,7 @@ function createRespawnBeam(x, y) {
     x,
     y,
     startY,
+    endY,
     time: RESPAWN_BEAM_DURATION,
     height: beamHeight,
     segments
@@ -769,10 +772,11 @@ function drawRespawnBeams() {
     const alpha = Math.max(0, 1 - progress * 0.8);
     const beamHeight = beam.height || canvas.height * 0.6;
     const startY = beam.startY ?? (beam.y - beamHeight);
+    const endY = beam.endY ?? (beam.y - RESPAWN_BEAM_FOOT_LIFT);
     const jitterPhase = frameTimeMs / 30;
     ctx.save();
     ctx.globalAlpha = alpha;
-    const gradient = ctx.createLinearGradient(beam.x, startY, beam.x, beam.y + 20);
+    const gradient = ctx.createLinearGradient(beam.x, startY, beam.x, endY + 10);
     gradient.addColorStop(0, 'rgba(255, 255, 255, 0)');
     gradient.addColorStop(0.4, 'rgba(110, 245, 198, 0.15)');
     gradient.addColorStop(0.6, 'rgba(255, 93, 217, 0.2)');
@@ -787,7 +791,7 @@ function drawRespawnBeams() {
       };
     }) || [
       { x: beam.x, y: startY },
-      { x: beam.x, y: beam.y }
+      { x: beam.x, y: endY }
     ];
 
     ctx.shadowColor = '#6ef5c6';
@@ -799,7 +803,7 @@ function drawRespawnBeams() {
     for (let i = 1; i < jaggedSegments.length; i++) {
       ctx.lineTo(jaggedSegments[i].x, jaggedSegments[i].y);
     }
-    ctx.lineTo(beam.x, beam.y + 18);
+    ctx.lineTo(beam.x, endY);
     ctx.stroke();
 
     // Beam core
@@ -811,7 +815,7 @@ function drawRespawnBeams() {
     for (let i = 1; i < jaggedSegments.length; i++) {
       ctx.lineTo(jaggedSegments[i].x, jaggedSegments[i].y);
     }
-    ctx.lineTo(beam.x, beam.y + 18);
+    ctx.lineTo(beam.x, endY);
     ctx.stroke();
 
     // Small side forks for extra energy
@@ -1157,6 +1161,7 @@ function createPlayer(col, row, color, keys) {
     deathTimer: 0,
     invincible: 0,
     trail: [],
+    respawnFx: 0,
   };
 }
 
@@ -1436,6 +1441,10 @@ function drawPlayers() {
     ctx.save();
     ctx.translate(p.x, p.y);
 
+    const angle = Math.atan2(p.dir.y, p.dir.x) || 0;
+    const strikeActive = p.respawnFx > 0;
+    let spriteAlpha = strikeActive ? 0.75 + 0.25 * Math.sin(nowMs / 45) : 1;
+
     // Shield power-up visual effect
     if (isPowerUpActive('SHIELD')) {
       const shieldPulse = Math.sin(nowMs / 100) * 0.2 + 0.8;
@@ -1451,11 +1460,9 @@ function drawPlayers() {
       ctx.shadowBlur = 0;
     }
 
-    const angle = Math.atan2(p.dir.y, p.dir.x) || 0;
-
     // Invincibility flash
     if (p.invincible > 0 && Math.floor(nowMs / 100) % 2) {
-      ctx.globalAlpha = 0.5;
+      spriteAlpha *= 0.5;
     }
 
     // Respawn invincibility aura
@@ -1473,11 +1480,32 @@ function drawPlayers() {
       ctx.restore();
     }
 
+    if (strikeActive) {
+      const strobePulse = 1 + Math.sin(nowMs / 60) * 0.25;
+      ctx.save();
+      ctx.rotate(-angle);
+      ctx.globalCompositeOperation = 'screen';
+      ctx.shadowColor = p.color;
+      ctx.shadowBlur = 28 * strobePulse;
+      ctx.lineWidth = 4 + 2 * strobePulse;
+      ctx.strokeStyle = `rgba(255, 255, 255, ${0.35 + 0.35 * Math.sin(nowMs / 40)})`;
+      ctx.beginPath();
+      ctx.arc(0, 0, (tileSize / 2 + 12) * strobePulse, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 0.5 + 0.2 * Math.sin(nowMs / 30);
+      ctx.fillStyle = `${p.color}33`;
+      ctx.beginPath();
+      ctx.arc(0, 0, (tileSize / 2 + 6) * strobePulse, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    ctx.globalAlpha = spriteAlpha;
     ctx.rotate(angle);
 
     // Glow effect
     ctx.shadowColor = p.color;
-    ctx.shadowBlur = 15;
+    ctx.shadowBlur = strikeActive ? 22 : 15;
 
     const mouthOpen = (Math.sin(nowMs / 80) + 1) * 0.2;
     ctx.beginPath();
@@ -2808,6 +2836,11 @@ function update(dt) {
     }
   });
 
+  // Decay respawn flash effects
+  players.forEach(p => {
+    p.respawnFx = Math.max(0, p.respawnFx - dt);
+  });
+
   // Handle state machine
   switch (gameState) {
     case GAME_STATE.IDLE:
@@ -3005,6 +3038,7 @@ function resetPositions() {
   // Only set invincibility for active players
   getActivePlayers().forEach(p => {
     p.invincible = PLAYER_INVINCIBILITY_DURATION;
+    p.respawnFx = RESPAWN_BEAM_DURATION;
     createRespawnBeam(p.x, p.y);
   });
 
