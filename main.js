@@ -21,6 +21,11 @@ const collisionPadding = 2;
 const COLLISION_RADIUS_FACTOR = 1.5;
 const PLAYER_INVINCIBILITY_DURATION = 2;
 const PLAYER_TRAIL_LENGTH = 8;
+const POOP_GHOSTS_REQUIRED = 3;
+const POOP_DURATION = 2.5;
+const POOP_DEADLINE = 10;
+const POOP_LIFETIME = 15;
+const POOP_STUN_DURATION = 5;
 
 // Scoring configuration
 const PELLET_BASE_SCORE = 10;
@@ -1010,6 +1015,7 @@ const pelletRenderList = [];
 const powerPelletRenderList = [];
 const fruitTimers = [];
 const gateSegments = [];
+const poops = [];
 
 function getGhostPalette() {
   return colorblindMode ? COLORBLIND_GHOST_COLORS : DEFAULT_GHOST_COLORS;
@@ -1162,6 +1168,9 @@ function createPlayer(col, row, color, keys) {
     invincible: 0,
     trail: [],
     respawnFx: 0,
+    poopMeter: 0,
+    poopDeadline: 0,
+    poopingTimer: 0,
   };
 }
 
@@ -1190,6 +1199,7 @@ function createGhost(col, row, color, personality) {
     wobble: Math.random() * Math.PI * 2,
     lastDecisionTile: { x: -1, y: -1 }, // Track last tile where decision was made
     respawnShield: 0,
+    stunnedTimer: 0,
   };
 }
 
@@ -1203,6 +1213,7 @@ function resetBoard() {
   pelletRenderList.length = 0;
   powerPelletRenderList.length = 0;
   fruitTimers.length = 0;
+  poops.length = 0;
   totalPellets = 0;
   levelStats = {
     pellets: 0,
@@ -1590,6 +1601,10 @@ function drawGhosts() {
 
     if (g.eaten) {
       ghostColor = 'rgba(158, 160, 255, 0.3)';
+    } else if (g.stunnedTimer > 0) {
+      ghostColor = '#c28b57';
+      eyeColor = '#f9e6d3';
+      pupilColor = '#6b3d11';
     } else if (isFrozen) {
       // Frozen ghosts are icy blue
       ghostColor = POWERUP_TYPES.FREEZE.color;
@@ -1841,6 +1856,17 @@ function drawUI() {
   drawParticles();
 }
 
+function drawPoops() {
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = `${tileSize}px "Press Start 2P", monospace`;
+  poops.forEach((p) => {
+    ctx.fillText('💩', p.x, p.y + 4);
+  });
+  ctx.restore();
+}
+
 // ==================== COLLISION & MOVEMENT ====================
 function isInGhostHouse(x, y) {
   const tileX = Math.floor(x / tileSize);
@@ -1957,6 +1983,13 @@ function tryTurn(player) {
 
 function movePlayer(player, dt) {
   if (player.invincible > 0) player.invincible -= dt;
+
+  if (player.poopingTimer > 0) {
+    player.poopingTimer = Math.max(0, player.poopingTimer - dt);
+    player.dir = { x: 0, y: 0 };
+    player.queued = { x: 0, y: 0 };
+    return;
+  }
 
   tryTurn(player);
 
@@ -2144,6 +2177,11 @@ function findDirectionToTarget(startTile, targetTile, allowGate = false) {
 
 function moveGhost(ghost, dt) {
   const nowMs = frameTimeMs;
+
+  ghost.stunnedTimer = Math.max(0, ghost.stunnedTimer - dt);
+  if (ghost.stunnedTimer > 0) {
+    return;
+  }
 
   // Freeze power-up stops all ghosts
   if (isPowerUpActive('FREEZE') && !ghost.eaten) {
@@ -2398,6 +2436,63 @@ function collide(a, b) {
 }
 
 // ==================== GAME LOGIC ====================
+function startPooping(player) {
+  if (!player.alive || player.poopingTimer > 0) return;
+
+  poops.push({ x: player.x, y: player.y, timer: POOP_LIFETIME });
+  player.poopingTimer = POOP_DURATION;
+  player.poopMeter = 0;
+  player.poopDeadline = 0;
+  player.dir = { x: 0, y: 0 };
+  player.queued = { x: 0, y: 0 };
+
+  createScorePopup(player.x, player.y - 28, '💩', '#c28b57');
+}
+
+function chargePoopMeter(player) {
+  if (player.poopingTimer > 0 || !player.alive) return;
+
+  player.poopMeter = Math.min(POOP_GHOSTS_REQUIRED, player.poopMeter + 1);
+
+  if (player.poopMeter >= POOP_GHOSTS_REQUIRED) {
+    player.poopDeadline = POOP_DEADLINE;
+    startPooping(player);
+  }
+}
+
+function updatePoopMechanics(dt) {
+  getActivePlayers().forEach((p) => {
+    if (p.poopDeadline > 0 && p.poopingTimer <= 0 && p.alive) {
+      p.poopDeadline -= dt;
+      if (p.poopDeadline <= 0) {
+        p.poopDeadline = 0;
+        loseLife(p);
+      }
+    }
+  });
+
+  for (let i = poops.length - 1; i >= 0; i--) {
+    const poop = poops[i];
+    poop.timer -= dt;
+
+    if (poop.timer <= 0) {
+      poops.splice(i, 1);
+      continue;
+    }
+
+    for (const ghost of ghosts) {
+      if (ghost.eaten) continue;
+      const touchingPoop = Math.hypot(ghost.x - poop.x, ghost.y - poop.y) < tileSize / COLLISION_RADIUS_FACTOR;
+      if (touchingPoop) {
+        ghost.stunnedTimer = POOP_STUN_DURATION;
+        poops.splice(i, 1);
+        createParticle(ghost.x, ghost.y, '#c28b57', 'ghost');
+        break;
+      }
+    }
+  }
+}
+
 function eatPellet(player) {
   const key = `${Math.floor(player.x / tileSize)},${Math.floor(player.y / tileSize)}`;
 
@@ -2901,6 +2996,7 @@ function update(dt) {
 
   getActivePlayers().forEach((p) => p.alive && movePlayer(p, dt));
   ghosts.forEach((g) => moveGhost(g, dt));
+  updatePoopMechanics(dt);
   checkCollisions();
 
   // Update power-ups
@@ -2937,7 +3033,7 @@ function checkCollisions() {
   const activePlayers = getActivePlayers();
   ghosts.forEach((g) => {
     activePlayers.forEach((p) => {
-      if (!p.alive || g.eaten || g.inHouse || p.invincible > 0) return;
+      if (!p.alive || g.eaten || g.inHouse || p.invincible > 0 || g.stunnedTimer > 0) return;
       const playerIdx = players.indexOf(p);
       const distance = Math.hypot(g.x - p.x, g.y - p.y);
 
@@ -2972,6 +3068,7 @@ function checkCollisions() {
           sessionStats.ghostsEaten++;
           levelStats.ghosts += 1;
           ghostsEatenThisPowerUp++;
+          chargePoopMeter(p);
 
           // Update longest combo
           if (comboCount > stats.longestCombo) {
@@ -3031,6 +3128,8 @@ function resetPositions() {
   // In single-player mode, P1 starts in the center; in 2P mode, players are offset
   const p1Col = singlePlayerMode ? 13 : 11;
   const p2Col = 16;
+
+  poops.length = 0;
 
   players[0] = { ...createPlayer(p1Col, playerStartRow, '#f6d646', ['ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight']), score: players[0].score };
   players[1] = { ...createPlayer(p2Col, playerStartRow, '#6ef5c6', ['KeyW', 'KeyA', 'KeyS', 'KeyD']), score: players[1].score };
@@ -3204,6 +3303,7 @@ function loop(timestamp) {
 
     drawGrid();
     drawRespawnBeams();
+    drawPoops();
     drawPlayers();
     drawGhosts();
     drawUI();
