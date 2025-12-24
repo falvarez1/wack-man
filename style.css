@@ -146,6 +146,10 @@ body::after {
   gap: 16px;
 }
 
+.hud-row > * {
+  min-width: 0;
+}
+
 .hud-row-top {
   grid-template-columns: minmax(200px, 1.35fr) minmax(200px, 1fr) auto;
 }
@@ -1250,23 +1254,95 @@ button:active {
 }
 
 @media (max-width: 640px) {
-  .hud-row-top,
+  .hud {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+
+  .hud-row-top {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    column-gap: 10px;
+  }
+
   .hud-row-bottom {
-    grid-template-columns: 1fr;
-    justify-items: center;
-    text-align: center;
-    row-gap: 10px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.95fr) minmax(0, 0.95fr) auto;
+    column-gap: 10px;
+  }
+
+  .title {
+    font-size: 17px;
+  }
+
+  .subtitle {
+    font-size: 7px;
+    letter-spacing: 2px;
+  }
+
+  .high-score-display,
+  .stat-box,
+  .poop-meter,
+  .actions,
+  .controls {
+    width: 100%;
+  }
+
+  .high-score-display {
+    justify-self: end;
+  }
+
+  .poop-meter {
+    padding: 6px 8px;
+    gap: 8px;
+  }
+
+  .poop-meter-bar {
+    width: 150px;
+  }
+
+  .stat-box {
+    min-width: 70px;
+    padding: 7px 10px;
+  }
+
+  .actions {
+    gap: 6px;
+  }
+
+  .btn-start,
+  .btn-pause {
+    padding-inline: 10px;
+  }
+
+  .controls {
+    gap: 8px;
+  }
+}
+
+@media (max-width: 460px) {
+  .hud-row-top {
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
   .hud-icons {
-    order: 3;
+    grid-column: 2;
+    justify-self: end;
   }
 
-  .controls,
-  .stats,
-  .actions,
+  .high-score-display {
+    grid-column: 1;
+    justify-self: start;
+  }
+
+  .hud-row-bottom {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+    row-gap: 8px;
+  }
+
   .poop-meter {
-    width: 100%;
+    grid-column: span 2;
+    justify-self: stretch;
+    margin: 0;
   }
 }
 
