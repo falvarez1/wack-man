@@ -285,6 +285,7 @@ let frameTimeMs = 0;
 let frameTime = 0;
 const hudElement = document.querySelector('.hud');
 const hudToggle = document.getElementById('hud-toggle');
+const hudBackdrop = document.querySelector('.hud-backdrop');
 const touchPad = document.getElementById('touch-pad');
 const poopMeter = document.querySelector('.poop-meter');
 const poopMeterFill = document.querySelector('.poop-meter-fill');
@@ -385,6 +386,12 @@ function queueToast(message, options = {}) {
 function setHudCollapsed(collapsed) {
   if (!hudElement) return;
   hudElement.classList.toggle('hud-collapsed', collapsed);
+  hudElement.classList.toggle('hud-modal', !collapsed);
+
+  if (hudBackdrop) {
+    hudBackdrop.classList.toggle('open', !collapsed);
+    hudBackdrop.setAttribute('aria-hidden', collapsed ? 'true' : 'false');
+  }
 
   if (hudToggle) {
     hudToggle.setAttribute('aria-expanded', (!collapsed).toString());
@@ -1617,19 +1624,22 @@ function drawPlayers() {
       const isMoving = p.dir.x !== 0 || p.dir.y !== 0;
       const baseSpeed = Math.sqrt(p.dir.x * p.dir.x + p.dir.y * p.dir.y);
       const animSpeed = isMoving ? 120 - (baseSpeed * 20) : 150; // Faster animation when moving faster
-      const handWave = Math.sin(nowMs / animSpeed) * 15; // Up/down 15px oscillation
-      const handOffset = tileSize / 2 + 5;
-      const handTilt = Math.sin(nowMs / animSpeed) * 0.08;
+      const waveSine = Math.sin(nowMs / animSpeed);
+      const waveProgress = (waveSine + 1) / 2;
+      const handBob = waveSine * 12; // Vertical bob for depth illusion
+      const handOffset = tileSize * 0.75;
+      const lateralSpread = tileSize * 0.18;
+      const handTilt = waveSine * 0.08;
 
       ensureHandSprite();
-      const handScale = 0.7;
-      const drawSize = handSprite.width * handScale;
+      const baseScale = 0.7;
 
-      const drawHand = (offsetX, offsetY, flip = false) => {
+      const drawHand = (offsetX, offsetY, scale = baseScale, flip = false) => {
         ctx.save();
         ctx.translate(offsetX, offsetY);
         ctx.rotate(handTilt);
         if (flip) ctx.scale(-1, 1);
+        const drawSize = handSprite.width * scale;
         ctx.drawImage(
           handSprite.canvas,
           -drawSize / 2,
@@ -1644,8 +1654,11 @@ function drawPlayers() {
       ctx.shadowColor = POWERUP_TYPES.HANDS.color;
       ctx.shadowBlur = 10;
 
-      drawHand(-handOffset, handWave, false);
-      drawHand(handOffset, -handWave, true);
+      const leftHandScale = baseScale + 0.14 * waveProgress;
+      const rightHandScale = baseScale + 0.14 * (1 - waveProgress);
+
+      drawHand(handOffset, handBob - lateralSpread, leftHandScale, false);
+      drawHand(handOffset, -handBob + lateralSpread, rightHandScale, true);
 
       // Add sparkle particles occasionally
       if (Math.random() < 0.1) {
@@ -2516,6 +2529,46 @@ function collide(a, b) {
   return Math.hypot(a.x - b.x, a.y - b.y) < tileSize / COLLISION_RADIUS_FACTOR;
 }
 
+function isFacingTarget(player, target) {
+  const dirMagnitude = Math.hypot(player.dir.x, player.dir.y);
+  if (dirMagnitude === 0) return false;
+
+  const toTarget = { x: target.x - player.x, y: target.y - player.y };
+  const targetMagnitude = Math.hypot(toTarget.x, toTarget.y);
+  if (targetMagnitude === 0) return true;
+
+  const dot = (player.dir.x / dirMagnitude) * (toTarget.x / targetMagnitude) +
+    (player.dir.y / dirMagnitude) * (toTarget.y / targetMagnitude);
+
+  return dot > 0.35;
+}
+
+function bumpGhostWithHands(ghost, player) {
+  const dirMagnitude = Math.hypot(player.dir.x, player.dir.y);
+  if (dirMagnitude === 0) return;
+
+  const pushDir = { x: player.dir.x / dirMagnitude, y: player.dir.y / dirMagnitude };
+  const knockbackDistance = tileSize * 0.9;
+  const targetX = ghost.x + pushDir.x * knockbackDistance;
+  const targetY = ghost.y + pushDir.y * knockbackDistance;
+
+  const targetTileX = Math.floor(targetX / tileSize);
+  const targetTileY = Math.floor(targetY / tileSize);
+  if (isPassable(targetTileX, targetTileY, true, ghost.inHouse)) {
+    ghost.x = targetX;
+    ghost.y = targetY;
+  } else {
+    ghost.x += pushDir.x * tileSize * 0.4;
+    ghost.y += pushDir.y * tileSize * 0.4;
+  }
+
+  ghost.dir = { x: -pushDir.x, y: -pushDir.y };
+  ghost.stunnedTimer = 0.35;
+  wrapPosition(ghost);
+  screenShake = Math.max(screenShake, 0.35);
+  createParticle(ghost.x, ghost.y, POWERUP_TYPES.HANDS.color, 'spark');
+}
+
 // ==================== GAME LOGIC ====================
 function startPooping(player) {
   if (!player.alive || player.poopingTimer > 0) return;
@@ -3170,6 +3223,8 @@ function checkCollisions() {
 
           // Enhanced ghost eating sound effect (like arcade)
           playGhostEatenSound();
+        } else if (isPowerUpActive('HANDS') && isFacingTarget(p, g)) {
+          bumpGhostWithHands(g, p);
         } else {
           loseLife(p);
         }
