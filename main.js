@@ -387,6 +387,10 @@ function setHudCollapsed(collapsed) {
   if (!hudElement) return;
   hudElement.classList.toggle('hud-collapsed', collapsed);
   hudElement.classList.toggle('hud-modal', !collapsed);
+  hudElement.setAttribute('role', collapsed ? 'region' : 'dialog');
+  hudElement.setAttribute('aria-modal', (!collapsed).toString());
+
+  document.body.classList.toggle('hud-menu-open', !collapsed);
 
   if (hudBackdrop) {
     hudBackdrop.classList.toggle('open', !collapsed);
@@ -3492,7 +3496,7 @@ function updatePoopMeterUI() {
   });
 
   const ratio = isPooping ? 1 : Math.min(1, highestMeter / POOP_GHOSTS_REQUIRED);
-  poopMeterFill.style.height = `${ratio * 100}%`;
+  poopMeterFill.style.width = `${ratio * 100}%`;
 
   poopMeter.classList.toggle('is-active', ratio > 0);
   poopMeter.classList.toggle('is-armed', highestMeter >= POOP_GHOSTS_REQUIRED);
@@ -3521,10 +3525,9 @@ function updateHud() {
 function updateStartButtonLabel() {
   const startBtn = document.getElementById('start');
   if (!startBtn) return;
-  const isRestart = hasStartedOnce;
-  startBtn.textContent = isRestart ? '⟳ RESTART' : '▶ START';
-  startBtn.setAttribute('aria-label', isRestart ? 'Restart game' : 'Start game');
-  startBtn.classList.toggle('is-restart', isRestart);
+  startBtn.textContent = '▶ START';
+  startBtn.setAttribute('aria-label', 'Start game');
+  startBtn.classList.remove('is-restart');
 }
 
 // ==================== AUDIO ====================
@@ -3901,10 +3904,22 @@ if (hudToggle && hudElement) {
   });
 }
 
+if (hudBackdrop && hudElement) {
+  hudBackdrop.addEventListener('click', () => setHudCollapsed(true));
+}
+
 window.addEventListener('keydown', (e) => {
   if (isSettingsOpen()) {
     if (e.code === 'Escape') {
       closeSettings();
+    }
+    return;
+  }
+
+  const hudMenuOpen = hudElement && !hudElement.classList.contains('hud-collapsed');
+  if (hudMenuOpen) {
+    if (e.code === 'Escape') {
+      setHudCollapsed(true);
     }
     return;
   }
@@ -4098,6 +4113,15 @@ if (startButton) {
     if (gameState === GAME_STATE.IDLE) {
       startGame();
     }
+  });
+}
+
+const restartIconButton = document.getElementById('restart-icon');
+if (restartIconButton) {
+  restartIconButton.addEventListener('click', () => {
+    resetGame();
+    startGame();
+    setHudCollapsed(false);
   });
 }
 
