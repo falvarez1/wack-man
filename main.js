@@ -3492,7 +3492,7 @@ function updatePoopMeterUI() {
   });
 
   const ratio = isPooping ? 1 : Math.min(1, highestMeter / POOP_GHOSTS_REQUIRED);
-  poopMeterFill.style.height = `${ratio * 100}%`;
+  poopMeterFill.style.width = `${ratio * 100}%`;
 
   poopMeter.classList.toggle('is-active', ratio > 0);
   poopMeter.classList.toggle('is-armed', highestMeter >= POOP_GHOSTS_REQUIRED);
@@ -3521,10 +3521,9 @@ function updateHud() {
 function updateStartButtonLabel() {
   const startBtn = document.getElementById('start');
   if (!startBtn) return;
-  const isRestart = hasStartedOnce;
-  startBtn.textContent = isRestart ? '⟳ RESTART' : '▶ START';
-  startBtn.setAttribute('aria-label', isRestart ? 'Restart game' : 'Start game');
-  startBtn.classList.toggle('is-restart', isRestart);
+  startBtn.textContent = '▶ START';
+  startBtn.setAttribute('aria-label', 'Start game');
+  startBtn.classList.remove('is-restart');
 }
 
 // ==================== AUDIO ====================
@@ -4098,6 +4097,15 @@ if (startButton) {
     if (gameState === GAME_STATE.IDLE) {
       startGame();
     }
+  });
+}
+
+const restartIconButton = document.getElementById('restart-icon');
+if (restartIconButton) {
+  restartIconButton.addEventListener('click', () => {
+    resetGame();
+    startGame();
+    setHudCollapsed(false);
   });
 }
 
