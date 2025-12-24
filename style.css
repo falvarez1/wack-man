@@ -187,31 +187,26 @@ body::after {
   display: inline-flex;
   align-items: center;
   justify-self: center;
-  gap: 10px;
-  color: #c28b57;
-  background: linear-gradient(135deg, rgba(30, 20, 12, 0.6), rgba(12, 8, 4, 0.75));
-  border: 1px solid rgba(194, 139, 87, 0.35);
-  padding: 8px 12px;
-  border-radius: 12px;
-  box-shadow:
-    0 8px 18px rgba(0, 0, 0, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
   justify-content: center;
+  gap: 8px;
+  color: #c28b57;
+  padding: 2px 4px;
+  border-radius: 10px;
   margin: 0 auto;
 }
 
 .poop-meter-bar {
-  width: 180px;
-  height: 16px;
-  border-radius: 10px;
-  border: 1px solid rgba(194, 139, 87, 0.5);
-  background: linear-gradient(90deg, rgba(0, 0, 0, 0.6), rgba(18, 10, 6, 0.85));
+  width: 168px;
+  height: 12px;
+  border-radius: 9px;
+  border: 1px solid rgba(194, 139, 87, 0.45);
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.55), rgba(18, 10, 6, 0.78));
   display: flex;
   align-items: center;
   overflow: hidden;
   box-shadow:
-    inset 0 0 12px rgba(0, 0, 0, 0.65),
-    0 0 16px rgba(194, 139, 87, 0.25);
+    inset 0 0 10px rgba(0, 0, 0, 0.6),
+    0 0 12px rgba(194, 139, 87, 0.2);
 }
 
 .poop-meter-fill {
@@ -225,8 +220,8 @@ body::after {
 }
 
 .poop-meter-emoji {
-  font-size: 16px;
-  text-shadow: 0 0 10px rgba(194, 139, 87, 0.4);
+  font-size: 14px;
+  text-shadow: 0 0 8px rgba(194, 139, 87, 0.35);
 }
 
 .poop-meter.is-armed .poop-meter-fill {
@@ -1281,7 +1276,6 @@ button:active {
 
   .high-score-display,
   .stat-box,
-  .poop-meter,
   .actions,
   .controls {
     width: 100%;
@@ -1289,15 +1283,6 @@ button:active {
 
   .high-score-display {
     justify-self: end;
-  }
-
-  .poop-meter {
-    padding: 6px 8px;
-    gap: 8px;
-  }
-
-  .poop-meter-bar {
-    width: 150px;
   }
 
   .stat-box {
@@ -1341,7 +1326,7 @@ button:active {
 
   .poop-meter {
     grid-column: span 2;
-    justify-self: stretch;
+    justify-self: center;
     margin: 0;
   }
 }
