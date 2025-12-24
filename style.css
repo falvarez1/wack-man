@@ -49,6 +49,10 @@ body {
   left: 0;
 }
 
+body.hud-menu-open {
+  overflow: hidden;
+}
+
 /* Animated background */
 body::before {
   content: '';
@@ -104,23 +108,27 @@ body::after {
   100% { transform: translate3d(4%, 3%, 0) scale(1); }
 }
 
-.hud {
-  width: min(920px, 100%);
-  background:
-    linear-gradient(135deg, rgba(20, 20, 50, 0.92), rgba(10, 10, 30, 0.94));
-  border: 2px solid rgba(110, 245, 198, 0.18);
-  border-radius: 18px;
-  padding: 14px 18px 16px;
-  box-shadow:
-    0 16px 40px rgba(0, 0, 0, 0.45),
-    0 0 30px rgba(110, 245, 198, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(8px);
-  position: relative;
-  z-index: 2;
-  overflow: hidden;
-  margin: 0 auto 16px;
-}
+  .hud {
+    width: min(920px, 100%);
+    background:
+      linear-gradient(135deg, rgba(20, 20, 50, 0.92), rgba(10, 10, 30, 0.94));
+    border: 2px solid rgba(110, 245, 198, 0.18);
+    border-radius: 18px;
+    padding: 14px 18px 16px;
+    box-shadow:
+      0 16px 40px rgba(0, 0, 0, 0.45),
+      0 0 30px rgba(110, 245, 198, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(8px);
+    position: relative;
+    z-index: 2;
+    overflow: hidden;
+    margin: 0 auto 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
+  }
 
 .hud::before {
   content: '';
@@ -132,23 +140,49 @@ body::after {
   background: linear-gradient(90deg, transparent, rgba(110, 245, 198, 0.3), transparent);
 }
 
-.hud-top-row {
-  display: flex;
+.hud-row {
+  display: grid;
   align-items: center;
-  justify-content: space-between;
   gap: 16px;
+}
+
+.hud-row-top {
+  grid-template-columns: minmax(220px, 1.4fr) minmax(220px, 1fr) auto;
+}
+
+.hud-row-bottom {
+  grid-template-columns: minmax(260px, 1.35fr) minmax(220px, 1fr) minmax(260px, 1.25fr) auto;
+  align-items: stretch;
+  gap: 14px;
 }
 
 .title-container {
   text-align: left;
-  margin-bottom: 8px;
+  margin-bottom: 0;
 }
 
-.hud-backdrop { display: none; }
+  .hud-backdrop {
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(circle at 30% 30%, rgba(110, 245, 198, 0.08), transparent 45%),
+      radial-gradient(circle at 70% 70%, rgba(255, 75, 139, 0.08), transparent 40%),
+      rgba(2, 2, 8, 0.82);
+    backdrop-filter: blur(6px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 200ms ease;
+    z-index: 6;
+  }
+
+  .hud-backdrop.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
 
 .poop-meter {
   display: inline-flex;
   align-items: center;
+  justify-self: center;
   gap: 10px;
   color: #c28b57;
   background: linear-gradient(135deg, rgba(30, 20, 12, 0.6), rgba(12, 8, 4, 0.75));
@@ -159,7 +193,7 @@ body::after {
     0 8px 18px rgba(0, 0, 0, 0.35),
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
   justify-content: center;
-  margin: 8px auto 14px;
+  margin: 0 auto;
 }
 
 .poop-meter-bar {
@@ -273,9 +307,22 @@ body::after {
   display: flex;
 }
 
-.hud.hud-modal {
-  width: min(840px, 96vw);
-}
+  .hud.hud-modal {
+    width: min(860px, 96vw);
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    margin: 0;
+    max-height: calc(100vh - 120px);
+    overflow: auto;
+    z-index: 7;
+    border-color: rgba(110, 245, 198, 0.35);
+    box-shadow:
+      0 20px 45px rgba(0, 0, 0, 0.65),
+      0 0 40px rgba(110, 245, 198, 0.18),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
 
 .hud.compact {
   padding: 12px 14px;
@@ -299,7 +346,7 @@ body::after {
 
 .title-container {
   text-align: left;
-  margin-bottom: 10px;
+  margin-bottom: 0;
 }
 
 .title {
@@ -332,8 +379,8 @@ body::after {
   justify-content: center;
   align-items: center;
   gap: 12px;
-  margin-bottom: 16px;
-  padding: 10px 20px;
+  margin: 0;
+  padding: 10px 18px;
   background: rgba(0, 0, 0, 0.3);
   border-radius: 10px;
   border: 1px solid rgba(255, 93, 217, 0.2);
@@ -357,7 +404,7 @@ body::after {
   align-items: center;
   gap: 20px;
   flex-wrap: wrap;
-  margin-bottom: 16px;
+  margin: 0 auto;
   font-size: 11px;
   color: #aab2ff;
 }
@@ -398,7 +445,7 @@ body::after {
   justify-content: center;
   gap: 16px;
   flex-wrap: wrap;
-  margin-bottom: 16px;
+  margin: 0;
 }
 
 .stat-box {
@@ -461,6 +508,7 @@ body::after {
   justify-content: center;
   gap: 8px;
   flex-wrap: wrap;
+  align-self: center;
 }
 
 button {
@@ -693,9 +741,9 @@ button:active {
   text-align: right;
 }
 
-.canvas-wrap {
-  margin-top: 20px;
-  background:
+  .canvas-wrap {
+    margin-top: 20px;
+    background:
     radial-gradient(circle at 20% 20%, rgba(246, 214, 70, 0.03), transparent 45%),
     radial-gradient(circle at 80% 0%, rgba(110, 245, 198, 0.05), transparent 40%),
     radial-gradient(circle at 50% 100%, rgba(255, 75, 139, 0.03), transparent 40%),
@@ -708,9 +756,14 @@ button:active {
     0 0 60px rgba(110, 245, 198, 0.03),
     inset 0 0 60px rgba(0, 0, 0, 0.3);
   position: relative;
-  animation: wrapGlow 5s ease-in-out infinite alternate;
-  width: min(96vw, 880px);
-}
+    animation: wrapGlow 5s ease-in-out infinite alternate;
+    width: min(96vw, 880px);
+  }
+
+  body.hud-menu-open .canvas-wrap {
+    filter: blur(2px) brightness(0.8);
+    transition: filter 180ms ease;
+  }
 
 .canvas-wrap::before {
   content: '';
@@ -1060,6 +1113,35 @@ button:active {
   pointer-events: auto;
 }
 
+@media (max-width: 900px) {
+  .hud-row-top {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
+    row-gap: 10px;
+  }
+
+  .title-container {
+    text-align: center;
+  }
+
+  .hud-row-bottom {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+
+  .hud-icons {
+    order: 3;
+  }
+
+  .controls,
+  .stats,
+  .actions,
+  .poop-meter {
+    width: 100%;
+  }
+}
+
 /* Responsive Design */
 @media (max-width: 720px) {
   body {
@@ -1089,13 +1171,8 @@ button:active {
     font-size: 7px;
   }
 
-  .title-container {
-    margin-bottom: 10px;
-  }
-
   .controls {
     gap: 10px;
-    margin-bottom: 10px;
     font-size: 10px;
   }
 
@@ -1107,7 +1184,7 @@ button:active {
 
   .stats {
     gap: 10px;
-    margin: 8px 0;
+    margin: 8px 0 0;
   }
 
   #lives {

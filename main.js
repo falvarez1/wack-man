@@ -387,6 +387,10 @@ function setHudCollapsed(collapsed) {
   if (!hudElement) return;
   hudElement.classList.toggle('hud-collapsed', collapsed);
   hudElement.classList.toggle('hud-modal', !collapsed);
+  hudElement.setAttribute('role', collapsed ? 'region' : 'dialog');
+  hudElement.setAttribute('aria-modal', (!collapsed).toString());
+
+  document.body.classList.toggle('hud-menu-open', !collapsed);
 
   if (hudBackdrop) {
     hudBackdrop.classList.toggle('open', !collapsed);
@@ -3900,10 +3904,22 @@ if (hudToggle && hudElement) {
   });
 }
 
+if (hudBackdrop && hudElement) {
+  hudBackdrop.addEventListener('click', () => setHudCollapsed(true));
+}
+
 window.addEventListener('keydown', (e) => {
   if (isSettingsOpen()) {
     if (e.code === 'Escape') {
       closeSettings();
+    }
+    return;
+  }
+
+  const hudMenuOpen = hudElement && !hudElement.classList.contains('hud-collapsed');
+  if (hudMenuOpen) {
+    if (e.code === 'Escape') {
+      setHudCollapsed(true);
     }
     return;
   }
