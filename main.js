@@ -286,6 +286,8 @@ let frameTime = 0;
 const hudElement = document.querySelector('.hud');
 const hudToggle = document.getElementById('hud-toggle');
 const touchPad = document.getElementById('touch-pad');
+const poopMeter = document.querySelector('.poop-meter');
+const poopMeterFill = document.querySelector('.poop-meter-fill');
 
 /**
  * Transitions game to a new state
@@ -315,7 +317,7 @@ function isGameOver() {
 }
 
 // ==================== TOAST NOTIFICATIONS ====================
-const MAX_TOASTS = 4;
+const MAX_TOASTS = 1;
 const TOAST_DURATION_MS = 3400;
 let toastContainer = null;
 
@@ -351,6 +353,9 @@ function dismissToast(toast) {
  */
 function queueToast(message, options = {}) {
   const container = getToastContainer();
+  while (container.firstChild) {
+    container.firstChild.remove();
+  }
   const toast = document.createElement('div');
   toast.className = 'toast';
   if (options.variant) {
@@ -360,6 +365,7 @@ function queueToast(message, options = {}) {
     toast.style.setProperty('--toast-accent', options.accent);
   }
   toast.textContent = message;
+  toast.setAttribute('title', message);
 
   if (container.children.length >= MAX_TOASTS) {
     dismissToast(container.firstElementChild);
@@ -560,6 +566,7 @@ const floatingTexts = [];
 const textSpriteCache = new Map();
 let pelletSprite = null;
 let powerPelletSprite = null;
+let handSprite = null;
 
 function getCachedTextSprite(text, size, color = '#fff', fontWeight = 'bold') {
   const key = `${fontWeight}:${size}:${color}:${text}`;
@@ -605,12 +612,84 @@ function createDotSprite(radius, color, shadowBlur) {
   return { canvas: buffer, radius, width: size, height: size };
 }
 
+function createHandSprite() {
+  const size = 44;
+  const canvasEl = document.createElement('canvas');
+  canvasEl.width = size;
+  canvasEl.height = size;
+  const handCtx = canvasEl.getContext('2d');
+
+  handCtx.translate(size / 2, size / 2);
+
+  handCtx.fillStyle = '#f8f9ff';
+  handCtx.strokeStyle = '#cfd5ff';
+  handCtx.lineWidth = 2;
+
+  // Palm base
+  handCtx.beginPath();
+  handCtx.ellipse(-1, 4, 10, 12, -0.2, 0, Math.PI * 2);
+  handCtx.fill();
+  handCtx.stroke();
+
+  // Fingers
+  const fingerSpacing = 6;
+  for (let i = -1; i <= 1; i++) {
+    handCtx.beginPath();
+    handCtx.ellipse(i * fingerSpacing, -8, 4.5, 7.5, -0.15, 0, Math.PI * 2);
+    handCtx.fill();
+    handCtx.stroke();
+  }
+
+  // Thumb
+  handCtx.beginPath();
+  handCtx.ellipse(-12, -1, 4.5, 7, -0.9, 0, Math.PI * 2);
+  handCtx.fill();
+  handCtx.stroke();
+
+  // Cuff (Sonic-esque blue)
+  handCtx.fillStyle = '#2c63ff';
+  handCtx.strokeStyle = '#8fb0ff';
+  handCtx.lineWidth = 1.5;
+  const cuffWidth = 26;
+  const cuffHeight = 10;
+  const cuffRadius = 4;
+  const cuffX = -cuffWidth / 2;
+  const cuffY = 11;
+  handCtx.beginPath();
+  handCtx.moveTo(cuffX + cuffRadius, cuffY);
+  handCtx.lineTo(cuffX + cuffWidth - cuffRadius, cuffY);
+  handCtx.quadraticCurveTo(cuffX + cuffWidth, cuffY, cuffX + cuffWidth, cuffY + cuffRadius);
+  handCtx.lineTo(cuffX + cuffWidth, cuffY + cuffHeight - cuffRadius);
+  handCtx.quadraticCurveTo(cuffX + cuffWidth, cuffY + cuffHeight, cuffX + cuffWidth - cuffRadius, cuffY + cuffHeight);
+  handCtx.lineTo(cuffX + cuffRadius, cuffY + cuffHeight);
+  handCtx.quadraticCurveTo(cuffX, cuffY + cuffHeight, cuffX, cuffY + cuffHeight - cuffRadius);
+  handCtx.lineTo(cuffX, cuffY + cuffRadius);
+  handCtx.quadraticCurveTo(cuffX, cuffY, cuffX + cuffRadius, cuffY);
+  handCtx.closePath();
+  handCtx.fill();
+  handCtx.stroke();
+
+  // Shine
+  handCtx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+  handCtx.beginPath();
+  handCtx.ellipse(-6, -2, 4, 6.5, -0.25, 0, Math.PI * 2);
+  handCtx.fill();
+
+  return { canvas: canvasEl, width: size, height: size };
+}
+
 function ensurePelletSprites() {
   if (!pelletSprite) {
     pelletSprite = createDotSprite(3, '#f6d646', 4);
   }
   if (!powerPelletSprite) {
     powerPelletSprite = createDotSprite(6, '#6ef5c6', 10);
+  }
+}
+
+function ensureHandSprite() {
+  if (!handSprite) {
+    handSprite = createHandSprite();
   }
 }
 
@@ -1540,31 +1619,33 @@ function drawPlayers() {
       const animSpeed = isMoving ? 120 - (baseSpeed * 20) : 150; // Faster animation when moving faster
       const handWave = Math.sin(nowMs / animSpeed) * 15; // Up/down 15px oscillation
       const handOffset = tileSize / 2 + 5;
+      const handTilt = Math.sin(nowMs / animSpeed) * 0.08;
+
+      ensureHandSprite();
+      const handScale = 0.7;
+      const drawSize = handSprite.width * handScale;
+
+      const drawHand = (offsetX, offsetY, flip = false) => {
+        ctx.save();
+        ctx.translate(offsetX, offsetY);
+        ctx.rotate(handTilt);
+        if (flip) ctx.scale(-1, 1);
+        ctx.drawImage(
+          handSprite.canvas,
+          -drawSize / 2,
+          -drawSize / 2,
+          drawSize,
+          drawSize
+        );
+        ctx.restore();
+      };
 
       // Golden glow effect for hands
       ctx.shadowColor = POWERUP_TYPES.HANDS.color;
       ctx.shadowBlur = 10;
 
-      // Left hand
-      ctx.fillStyle = '#ffe4b5'; // Skin tone
-      ctx.beginPath();
-      ctx.ellipse(-handOffset, handWave, 8, 12, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Left hand details (thumb)
-      ctx.beginPath();
-      ctx.ellipse(-handOffset - 6, handWave, 3, 4, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Right hand (opposite motion for running effect)
-      ctx.beginPath();
-      ctx.ellipse(handOffset, -handWave, 8, 12, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Right hand details (thumb)
-      ctx.beginPath();
-      ctx.ellipse(handOffset + 6, -handWave, 3, 4, 0, 0, Math.PI * 2);
-      ctx.fill();
+      drawHand(-handOffset, handWave, false);
+      drawHand(handOffset, -handWave, true);
 
       // Add sparkle particles occasionally
       if (Math.random() < 0.1) {
@@ -2491,6 +2572,8 @@ function updatePoopMechanics(dt) {
       }
     }
   }
+
+  updatePoopMeterUI();
 }
 
 function eatPellet(player) {
@@ -3339,6 +3422,33 @@ function renderLivesDisplay(livesCount) {
   }
 }
 
+function updatePoopMeterUI() {
+  if (!poopMeter || !poopMeterFill) return;
+
+  const activePlayers = getActivePlayers();
+  let highestMeter = 0;
+  let isPooping = false;
+  let onDeadline = false;
+
+  activePlayers.forEach((p) => {
+    highestMeter = Math.max(highestMeter, p.poopMeter || 0);
+    isPooping = isPooping || p.poopingTimer > 0;
+    onDeadline = onDeadline || p.poopDeadline > 0;
+  });
+
+  const ratio = isPooping ? 1 : Math.min(1, highestMeter / POOP_GHOSTS_REQUIRED);
+  poopMeterFill.style.height = `${ratio * 100}%`;
+
+  poopMeter.classList.toggle('is-active', ratio > 0);
+  poopMeter.classList.toggle('is-armed', highestMeter >= POOP_GHOSTS_REQUIRED);
+  poopMeter.classList.toggle('is-counting', onDeadline);
+
+  const statusText = isPooping
+    ? 'Poop in progress'
+    : `Poop meter ${Math.round(ratio * 100)}% charged`;
+  poopMeter.setAttribute('aria-label', statusText);
+}
+
 /**
  * Updates the HUD display with current game stats
  */
@@ -3346,6 +3456,7 @@ function updateHud() {
   document.getElementById('p1-score').textContent = players[0].score;
   document.getElementById('p2-score').textContent = players[1].score;
   renderLivesDisplay(lives);
+  updatePoopMeterUI();
 
   // Update high score display if it exists
   const highScoreEl = document.getElementById('high-score');
