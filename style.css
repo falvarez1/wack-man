@@ -111,15 +111,16 @@ body::after {
   .hud {
     width: min(920px, 100%);
     background:
-      linear-gradient(135deg, rgba(20, 20, 50, 0.92), rgba(10, 10, 30, 0.94));
-    border: 2px solid rgba(110, 245, 198, 0.18);
-    border-radius: 18px;
+      linear-gradient(145deg, rgba(18, 20, 48, 0.96), rgba(8, 10, 28, 0.98));
+    border: 1px solid rgba(110, 245, 198, 0.25);
+    border-radius: 16px;
     padding: 8px 18px 8px;
     box-shadow:
-      0 16px 40px rgba(0, 0, 0, 0.45),
-      0 0 30px rgba(110, 245, 198, 0.08),
-      inset 0 1px 0 rgba(255, 255, 255, 0.05);
-    backdrop-filter: blur(8px);
+      0 8px 32px rgba(0, 0, 0, 0.6),
+      0 2px 8px rgba(0, 0, 0, 0.4),
+      0 0 0 1px rgba(110, 245, 198, 0.1),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(12px);
     position: relative;
     z-index: 2;
     overflow: hidden;
@@ -137,7 +138,8 @@ body::after {
   left: 0;
   right: 0;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(110, 245, 198, 0.3), transparent);
+  background: linear-gradient(90deg, transparent 0%, rgba(110, 245, 198, 0.4) 50%, transparent 100%);
+  opacity: 0.6;
 }
 
 .hud-row {
@@ -198,15 +200,16 @@ body::after {
 .poop-meter-bar {
   width: 168px;
   height: 10px;
-  border-radius: 9px;
-  border: 1px solid rgba(194, 139, 87, 0.45);
-  background: linear-gradient(90deg, rgba(0, 0, 0, 0.55), rgba(18, 10, 6, 0.78));
+  border-radius: 6px;
+  border: 1px solid rgba(194, 139, 87, 0.3);
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.6), rgba(18, 10, 6, 0.8));
   display: flex;
   align-items: center;
   overflow: hidden;
   box-shadow:
-    inset 0 0 10px rgba(0, 0, 0, 0.6),
-    0 0 12px rgba(194, 139, 87, 0.2);
+    inset 0 2px 4px rgba(0, 0, 0, 0.7),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.5),
+    0 0 8px rgba(194, 139, 87, 0.15);
 }
 
 .poop-meter-fill {
@@ -248,37 +251,42 @@ body::after {
 
 .hud-icon-btn,
 .hud-toggle {
-  width: 42px;
-  height: 42px;
+  width: 40px;
+  height: 40px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 12px;
-  border: 1px solid rgba(110, 245, 198, 0.45);
-  background: linear-gradient(135deg, #1a1a3a, #0f1228);
+  border-radius: 10px;
+  border: 1px solid rgba(110, 245, 198, 0.25);
+  background: linear-gradient(145deg, rgba(26, 26, 58, 0.95), rgba(15, 18, 40, 0.98));
   color: var(--accent-2);
   box-shadow:
-    0 8px 18px rgba(0, 0, 0, 0.35),
-    0 0 16px rgba(110, 245, 198, 0.15),
+    0 4px 12px rgba(0, 0, 0, 0.4),
+    0 2px 4px rgba(0, 0, 0, 0.2),
+    0 0 0 1px rgba(110, 245, 198, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
   cursor: pointer;
-  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 2;
 }
 
 .hud-toggle:hover,
 .hud-icon-btn:hover {
   transform: translateY(-2px);
-  border-color: var(--accent-2);
+  border-color: rgba(110, 245, 198, 0.4);
   box-shadow:
-    0 10px 20px rgba(0, 0, 0, 0.4),
-    0 0 20px rgba(110, 245, 198, 0.25),
+    0 6px 16px rgba(0, 0, 0, 0.5),
+    0 2px 6px rgba(0, 0, 0, 0.3),
+    0 0 12px rgba(110, 245, 198, 0.2),
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .hud-toggle:active,
 .hud-icon-btn:active {
   transform: translateY(0);
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .hud.hud-collapsed {
@@ -349,28 +357,42 @@ body::after {
 }
 
 .title {
-  font-size: 28px;
+  font-size: 26px;
   color: var(--accent);
   text-shadow:
-    0 0 10px rgba(246, 214, 70, 0.8),
-    0 0 20px rgba(246, 214, 70, 0.4),
-    0 0 40px rgba(246, 214, 70, 0.2),
-    0 2px 0 #b8860b;
-  letter-spacing: 4px;
-  animation: titleGlow 2s ease-in-out infinite alternate;
+    0 0 20px rgba(246, 214, 70, 0.6),
+    0 0 40px rgba(246, 214, 70, 0.3),
+    0 2px 4px rgba(0, 0, 0, 0.5),
+    0 1px 0 rgba(184, 134, 11, 0.8);
+  letter-spacing: 3px;
+  font-weight: normal;
+  animation: titleGlow 3s ease-in-out infinite alternate;
 }
 
 @keyframes titleGlow {
-  from { text-shadow: 0 0 10px rgba(246, 214, 70, 0.8), 0 0 20px rgba(246, 214, 70, 0.4), 0 0 40px rgba(246, 214, 70, 0.2), 0 2px 0 #b8860b; }
-  to { text-shadow: 0 0 15px rgba(246, 214, 70, 1), 0 0 30px rgba(246, 214, 70, 0.6), 0 0 60px rgba(246, 214, 70, 0.3), 0 2px 0 #b8860b; }
+  from {
+    text-shadow:
+      0 0 20px rgba(246, 214, 70, 0.5),
+      0 0 40px rgba(246, 214, 70, 0.25),
+      0 2px 4px rgba(0, 0, 0, 0.5),
+      0 1px 0 rgba(184, 134, 11, 0.8);
+  }
+  to {
+    text-shadow:
+      0 0 30px rgba(246, 214, 70, 0.8),
+      0 0 50px rgba(246, 214, 70, 0.4),
+      0 2px 4px rgba(0, 0, 0, 0.5),
+      0 1px 0 rgba(184, 134, 11, 0.8);
+  }
 }
 
 .subtitle {
-  font-size: 10px;
+  font-size: 9px;
   color: var(--accent-2);
   letter-spacing: 2px;
   margin-top: 2px;
-  opacity: 0.8;
+  opacity: 0.7;
+  text-shadow: 0 0 10px rgba(110, 245, 198, 0.3);
 }
 
 .high-score-display {
@@ -380,21 +402,28 @@ body::after {
   gap: 12px;
   margin: 0;
   padding: 6px 14px;
-  background: rgba(0, 0, 0, 0.3);
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.25));
   border-radius: 10px;
-  border: 1px solid rgba(255, 93, 217, 0.2);
+  border: 1px solid rgba(255, 93, 217, 0.15);
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(255, 93, 217, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 .high-score-label {
-  font-size: 10px;
-  color: #ff5dd9;
-  opacity: 0.8;
+  font-size: 8px;
+  color: rgba(255, 93, 217, 0.7);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
 }
 
 .high-score-value {
   font-size: 16px;
   color: #ff5dd9;
-  text-shadow: 0 0 10px rgba(255, 93, 217, 0.5);
+  text-shadow:
+    0 0 15px rgba(255, 93, 217, 0.4),
+    0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
 .controls {
@@ -404,8 +433,9 @@ body::after {
   gap: 20px;
   flex-wrap: wrap;
   margin: 0 auto;
-  font-size: 11px;
-  color: #aab2ff;
+  font-size: 10px;
+  color: rgba(170, 178, 255, 0.8);
+  letter-spacing: 0.3px;
 }
 
 .control-group {
@@ -415,34 +445,39 @@ body::after {
 }
 
 .player-indicator {
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   display: inline-block;
 }
 
 .player-indicator.p1 {
   background: var(--accent);
-  box-shadow: 0 0 8px var(--accent);
+  box-shadow:
+    0 0 8px rgba(246, 214, 70, 0.6),
+    0 0 4px rgba(246, 214, 70, 0.8);
 }
 
 .player-indicator.p2 {
   background: var(--accent-2);
-  box-shadow: 0 0 8px var(--accent-2);
+  box-shadow:
+    0 0 8px rgba(110, 245, 198, 0.6),
+    0 0 4px rgba(110, 245, 198, 0.8);
 }
 
 .control-tip {
   font-size: 9px;
-  color: #666;
+  color: rgba(255, 255, 255, 0.3);
   width: 100%;
   text-align: center;
   margin-top: 4px;
+  letter-spacing: 0.3px;
 }
 
 .stats {
   display: flex;
   justify-content: center;
-  gap: 16px;
+  gap: 12px;
   flex-wrap: wrap;
   margin: 0;
 }
@@ -452,40 +487,56 @@ body::after {
   flex-direction: column;
   align-items: center;
   padding: 6px 20px;
-  background: rgba(0, 0, 0, 0.3);
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.25));
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   min-width: 90px;
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 .stat-label {
   font-size: 8px;
-  color: #666;
+  color: rgba(255, 255, 255, 0.4);
   margin-bottom: 2px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
 }
 
 .stat-value {
   font-size: 18px;
   font-weight: bold;
+  line-height: 1;
 }
 
 .p1-color {
   color: var(--accent);
-  text-shadow: 0 0 10px rgba(246, 214, 70, 0.5);
+  text-shadow:
+    0 0 12px rgba(246, 214, 70, 0.4),
+    0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
 .p2-color {
   color: var(--accent-2);
-  text-shadow: 0 0 10px rgba(110, 245, 198, 0.5);
+  text-shadow:
+    0 0 12px rgba(110, 245, 198, 0.4),
+    0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
 .lives-color {
   color: var(--ghost-1);
-  text-shadow: 0 0 10px rgba(255, 75, 139, 0.5);
+  text-shadow:
+    0 0 12px rgba(255, 75, 139, 0.4),
+    0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
 .lives-box {
-  border-color: rgba(255, 75, 139, 0.2);
+  border-color: rgba(255, 75, 139, 0.15);
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(255, 75, 139, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 #lives {
@@ -505,24 +556,25 @@ body::after {
 .actions {
   display: flex;
   justify-content: center;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
   align-self: center;
 }
 
 button {
-  background: linear-gradient(135deg, #20204d, #101022);
+  background: linear-gradient(145deg, rgba(32, 32, 77, 0.9), rgba(16, 16, 34, 0.95));
   color: var(--text);
-  border: 2px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
   padding: 9px 12px;
   font-family: 'Press Start 2P', system-ui, sans-serif;
   font-size: 10px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow:
-    0 8px 20px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    0 4px 12px rgba(0, 0, 0, 0.4),
+    0 2px 4px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
   position: relative;
   overflow: hidden;
 }
@@ -543,30 +595,42 @@ button:hover::before {
 }
 
 button:hover {
-  transform: translateY(-3px);
-  border-color: rgba(246, 214, 70, 0.5);
+  transform: translateY(-2px);
+  border-color: rgba(246, 214, 70, 0.4);
   box-shadow:
-    0 12px 30px rgba(0, 0, 0, 0.4),
-    0 0 20px rgba(246, 214, 70, 0.2);
+    0 6px 20px rgba(0, 0, 0, 0.5),
+    0 2px 8px rgba(0, 0, 0, 0.3),
+    0 0 12px rgba(246, 214, 70, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 button:active {
-  transform: translateY(-1px);
+  transform: translateY(0);
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .btn-start {
-  background: linear-gradient(135deg, #2d2d5a, #1a1a3d);
-  border-color: rgba(246, 214, 70, 0.3);
+  background: linear-gradient(145deg, rgba(45, 45, 90, 0.95), rgba(26, 26, 61, 0.98));
+  border-color: rgba(246, 214, 70, 0.25);
   color: var(--accent);
   padding: 10px 14px;
   font-size: 12px;
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.4),
+    0 2px 4px rgba(0, 0, 0, 0.2),
+    0 0 0 1px rgba(246, 214, 70, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .btn-start:hover {
-  border-color: var(--accent);
+  border-color: rgba(246, 214, 70, 0.4);
   box-shadow:
-    0 12px 30px rgba(0, 0, 0, 0.4),
-    0 0 30px rgba(246, 214, 70, 0.3);
+    0 6px 20px rgba(0, 0, 0, 0.5),
+    0 2px 8px rgba(0, 0, 0, 0.3),
+    0 0 20px rgba(246, 214, 70, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .btn-start.is-restart {
@@ -593,16 +657,23 @@ button:active {
 .btn-pause {
   padding: 10px 12px;
   font-size: 14px;
-  background: linear-gradient(135deg, #2d2d5a, #1a1a3d);
-  border-color: rgba(255, 75, 139, 0.3);
+  background: linear-gradient(145deg, rgba(45, 45, 90, 0.95), rgba(26, 26, 61, 0.98));
+  border-color: rgba(255, 75, 139, 0.25);
   color: var(--ghost-1);
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.4),
+    0 2px 4px rgba(0, 0, 0, 0.2),
+    0 0 0 1px rgba(255, 75, 139, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .btn-pause:hover {
-  border-color: var(--ghost-1);
+  border-color: rgba(255, 75, 139, 0.4);
   box-shadow:
-    0 12px 30px rgba(0, 0, 0, 0.4),
-    0 0 30px rgba(255, 75, 139, 0.3);
+    0 6px 20px rgba(0, 0, 0, 0.5),
+    0 2px 8px rgba(0, 0, 0, 0.3),
+    0 0 20px rgba(255, 75, 139, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .btn-pause.is-paused {
@@ -613,45 +684,59 @@ button:active {
 .btn-mode {
   padding: 9px 10px;
   font-size: 10px;
-  background: linear-gradient(135deg, #2d2d5a, #1a1a3d);
-  border-color: rgba(110, 245, 198, 0.3);
+  background: linear-gradient(145deg, rgba(45, 45, 90, 0.95), rgba(26, 26, 61, 0.98));
+  border-color: rgba(110, 245, 198, 0.25);
   color: var(--accent-2);
   min-width: 48px;
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.4),
+    0 2px 4px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .btn-mode:hover {
-  border-color: var(--accent-2);
+  border-color: rgba(110, 245, 198, 0.4);
   box-shadow:
-    0 12px 30px rgba(0, 0, 0, 0.4),
-    0 0 30px rgba(110, 245, 198, 0.3);
+    0 6px 20px rgba(0, 0, 0, 0.5),
+    0 2px 8px rgba(0, 0, 0, 0.3),
+    0 0 20px rgba(110, 245, 198, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .btn-mode.single-player {
-  border-color: rgba(246, 214, 70, 0.3);
+  border-color: rgba(246, 214, 70, 0.25);
   color: var(--accent);
 }
 
 .btn-mode.single-player:hover {
-  border-color: var(--accent);
+  border-color: rgba(246, 214, 70, 0.4);
   box-shadow:
-    0 12px 30px rgba(0, 0, 0, 0.4),
-    0 0 30px rgba(246, 214, 70, 0.3);
+    0 6px 20px rgba(0, 0, 0, 0.5),
+    0 2px 8px rgba(0, 0, 0, 0.3),
+    0 0 20px rgba(246, 214, 70, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .btn-difficulty {
   padding: 9px 10px;
   font-size: 9px;
-  background: linear-gradient(135deg, #2d2d5a, #1a1a3d);
-  border-color: rgba(255, 139, 66, 0.3);
+  background: linear-gradient(145deg, rgba(45, 45, 90, 0.95), rgba(26, 26, 61, 0.98));
+  border-color: rgba(255, 139, 66, 0.25);
   color: var(--ghost-3);
   min-width: 72px;
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.4),
+    0 2px 4px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .btn-difficulty:hover {
-  border-color: var(--ghost-3);
+  border-color: rgba(255, 139, 66, 0.4);
   box-shadow:
-    0 12px 30px rgba(0, 0, 0, 0.4),
-    0 0 30px rgba(255, 139, 66, 0.3);
+    0 6px 20px rgba(0, 0, 0, 0.5),
+    0 2px 8px rgba(0, 0, 0, 0.3),
+    0 0 20px rgba(255, 139, 66, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .btn-settings {
