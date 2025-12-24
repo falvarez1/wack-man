@@ -18,20 +18,26 @@
 </head>
 <body>
   <div class="hud">
-    <button id="hud-toggle" class="hud-toggle" aria-label="Hide game options" aria-expanded="true" type="button">🎮</button>
-    <div class="poop-meter" aria-label="Poop meter">
-      <div class="poop-meter-bar" aria-hidden="true">
-        <div class="poop-meter-fill"></div>
+    <div class="hud-top-row">
+      <div class="title-container">
+        <div class="title">WACK-MAN</div>
+        <div class="subtitle">Neon Maze Showdown</div>
       </div>
-      <div class="poop-meter-emoji" aria-hidden="true">💩</div>
-    </div>
-    <div class="title-container">
-      <div class="title">WACK-MAN</div>
-      <div class="subtitle">Neon Maze Showdown</div>
+      <div class="hud-icons" aria-label="Quick controls">
+        <button id="hud-toggle" class="hud-toggle" aria-label="Hide game options" aria-expanded="true" type="button">🎮</button>
+        <button id="settings" class="hud-icon-btn" aria-label="Open settings">⚙️</button>
+        <button id="restart-icon" class="hud-icon-btn" aria-label="Restart game">⟳</button>
+      </div>
     </div>
     <div class="high-score-display">
       <span class="high-score-label">HIGH SCORE</span>
       <span id="high-score" class="high-score-value">0</span>
+    </div>
+    <div class="poop-meter" aria-label="Poop meter">
+      <div class="poop-meter-emoji" aria-hidden="true">💩</div>
+      <div class="poop-meter-bar" aria-hidden="true">
+        <div class="poop-meter-fill"></div>
+      </div>
     </div>
     <div class="controls">
       <div class="control-group">
@@ -62,7 +68,6 @@
       <button id="start" class="btn-start" aria-label="Start game">▶ START</button>
       <button id="pause" class="btn-pause" aria-label="Pause game">⏸</button>
       <button id="mode" class="btn-mode single-player" aria-label="Toggle single or two player mode">1P</button>
-      <button id="settings" class="btn-settings" aria-label="Open settings">⚙️</button>
     </div>
   </div>
   <div class="hud-backdrop" aria-hidden="true"></div>
