@@ -116,7 +116,11 @@ body::after {
     0 0 40px rgba(110, 245, 198, 0.05),
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(10px);
-  position: relative;
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 12;
   overflow: hidden;
 }
 
@@ -128,6 +132,24 @@ body::after {
   right: 0;
   height: 1px;
   background: linear-gradient(90deg, transparent, rgba(110, 245, 198, 0.3), transparent);
+}
+
+.hud-backdrop {
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(circle at 40% 30%, rgba(110, 245, 198, 0.12), transparent 45%),
+    radial-gradient(circle at 70% 70%, rgba(255, 75, 139, 0.08), transparent 50%),
+    rgba(0, 0, 0, 0.65);
+  opacity: 0;
+  transition: opacity 200ms ease;
+  pointer-events: none;
+  z-index: 8;
+}
+
+.hud-backdrop.open {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .poop-meter {
@@ -150,6 +172,9 @@ body::after {
   border-radius: 10px;
   border: 1px solid rgba(194, 139, 87, 0.5);
   background: linear-gradient(180deg, rgba(0, 0, 0, 0.6), rgba(18, 10, 6, 0.85));
+  padding: 8px 0;
+  display: flex;
+  align-items: flex-end;
   overflow: hidden;
   box-shadow:
     inset 0 0 12px rgba(0, 0, 0, 0.65),
@@ -226,6 +251,10 @@ body::after {
   padding-top: 18px;
   padding-bottom: 14px;
   padding-left: 58px;
+  top: 12px;
+  transform: translateX(-50%);
+  width: min(520px, 94vw);
+  z-index: 9;
 }
 
 .hud.hud-collapsed .title-container,
@@ -246,6 +275,12 @@ body::after {
 
 .hud.hud-collapsed .poop-meter {
   display: flex;
+}
+
+.hud.hud-modal {
+  width: min(720px, 96vw);
+  max-height: min(80vh, 760px);
+  overflow-y: auto;
 }
 
 .hud.compact {
