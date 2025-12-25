@@ -646,7 +646,7 @@ function drawChristmasLights() {
     if (isOn) {
       const glowSize = CHRISTMAS_LIGHT_GLOW * (0.8 + brightness * 0.4);
       const gradient = ctx.createRadialGradient(light.x, light.y, 0, light.x, light.y, glowSize);
-      gradient.addColorStop(0, `${light.color}${Math.floor(intensity * 100).toString(16).padStart(2, '0')}`);
+      gradient.addColorStop(0, `${light.color}${Math.floor(intensity * 255).toString(16).padStart(2, '0')}`);
       gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
       ctx.fillStyle = gradient;
       ctx.fillRect(light.x - glowSize, light.y - glowSize, glowSize * 2, glowSize * 2);
