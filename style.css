@@ -114,7 +114,7 @@ body::after {
       linear-gradient(145deg, rgba(18, 20, 48, 0.96), rgba(8, 10, 28, 0.98));
     border: 1px solid rgba(110, 245, 198, 0.25);
     border-radius: 16px;
-    padding: 8px 18px 8px;
+    padding: 4px 14px;
     box-shadow:
       0 8px 32px rgba(0, 0, 0, 0.6),
       0 2px 8px rgba(0, 0, 0, 0.4),
@@ -124,10 +124,10 @@ body::after {
     position: relative;
     z-index: 2;
     overflow: hidden;
-    margin: 0 auto 16px;
+    margin: 0 auto 10px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
     transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
   }
 
@@ -145,7 +145,7 @@ body::after {
 .hud-row {
   display: grid;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .hud-row > * {
@@ -190,7 +190,7 @@ body::after {
   align-items: center;
   justify-self: center;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
   color: #c28b57;
   padding: 0px 4px;
   border-radius: 10px;
@@ -246,17 +246,17 @@ body::after {
 .hud-icons {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
 }
 
 .hud-icon-btn,
 .hud-toggle {
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 10px;
+  border-radius: 8px;
   border: 1px solid rgba(110, 245, 198, 0.25);
   background: linear-gradient(145deg, rgba(26, 26, 58, 0.95), rgba(15, 18, 40, 0.98));
   color: var(--accent-2);
@@ -441,7 +441,7 @@ body::after {
 .control-group {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .player-indicator {
@@ -470,14 +470,14 @@ body::after {
   color: rgba(255, 255, 255, 0.3);
   width: 100%;
   text-align: center;
-  margin-top: 4px;
+  margin-top: 2px;
   letter-spacing: 0.3px;
 }
 
 .stats {
   display: flex;
   justify-content: center;
-  gap: 12px;
+  gap: 8px;
   flex-wrap: wrap;
   margin: 0;
 }
@@ -486,11 +486,11 @@ body::after {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 6px 20px;
+  padding: 4px 14px;
   background: linear-gradient(135deg, rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.25));
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  min-width: 90px;
+  min-width: 78px;
   box-shadow:
     0 2px 8px rgba(0, 0, 0, 0.3),
     inset 0 1px 0 rgba(255, 255, 255, 0.03);
@@ -499,7 +499,7 @@ body::after {
 .stat-label {
   font-size: 8px;
   color: rgba(255, 255, 255, 0.4);
-  margin-bottom: 2px;
+  margin-bottom: 1px;
   letter-spacing: 0.5px;
   text-transform: uppercase;
 }
@@ -556,7 +556,7 @@ body::after {
 .actions {
   display: flex;
   justify-content: center;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
   align-self: center;
 }
@@ -566,7 +566,7 @@ button {
   color: var(--text);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
-  padding: 9px 12px;
+  padding: 7px 10px;
   font-family: 'Press Start 2P', system-ui, sans-serif;
   font-size: 10px;
   cursor: pointer;
@@ -615,8 +615,8 @@ button:active {
   background: linear-gradient(145deg, rgba(45, 45, 90, 0.95), rgba(26, 26, 61, 0.98));
   border-color: rgba(246, 214, 70, 0.25);
   color: var(--accent);
-  padding: 10px 14px;
-  font-size: 12px;
+  padding: 8px 12px;
+  font-size: 11px;
   box-shadow:
     0 4px 12px rgba(0, 0, 0, 0.4),
     0 2px 4px rgba(0, 0, 0, 0.2),
@@ -1199,17 +1199,17 @@ button:active {
 
 @media (max-width: 900px) {
   .hud {
-    gap: 10px;
+    gap: 7px;
   }
 
   .hud-row-top {
     grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr) auto;
-    column-gap: 12px;
+    column-gap: 10px;
   }
 
   .hud-row-bottom {
     grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.9fr) minmax(0, 1.1fr) auto;
-    column-gap: 12px;
+    column-gap: 10px;
   }
 
   .title-container {
@@ -1225,11 +1225,11 @@ button:active {
   }
 
   .hud {
-    padding: 12px 14px;
+    padding: 8px 10px;
     border-radius: 14px;
     width: 100%;
     max-width: 720px;
-    margin-top: 4px;
+    margin-top: 2px;
   }
 
   .hud.hud-collapsed {
@@ -1246,7 +1246,7 @@ button:active {
   }
 
   .controls {
-    gap: 10px;
+    gap: 8px;
     font-size: 10px;
   }
 
@@ -1257,8 +1257,8 @@ button:active {
   }
 
   .stats {
-    gap: 10px;
-    margin: 8px 0 0;
+    gap: 8px;
+    margin: 4px 0 0;
   }
 
   #lives {
@@ -1266,8 +1266,8 @@ button:active {
   }
 
   .stat-box {
-    padding: 8px 10px;
-    min-width: 76px;
+    padding: 6px 10px;
+    min-width: 72px;
   }
 
   .stat-value {
@@ -1290,17 +1290,17 @@ button:active {
   }
 
   .actions {
-    gap: 8px;
+    gap: 6px;
   }
 
   button {
-    padding: 9px 10px;
-    font-size: 10px;
+    padding: 7px 9px;
+    font-size: 9px;
   }
 
   .btn-start,
   .btn-pause {
-    font-size: 12px;
+    font-size: 11px;
   }
 
   .btn-mode,
@@ -1335,19 +1335,19 @@ button:active {
 
 @media (max-width: 640px) {
   .hud {
-    padding: 10px 12px;
-    gap: 8px;
+    padding: 8px 10px;
+    gap: 6px;
   }
 
   .hud-row-top {
     grid-template-columns: minmax(0, 1fr) auto auto;
     align-items: center;
-    column-gap: 10px;
+    column-gap: 8px;
   }
 
   .hud-row-bottom {
     grid-template-columns: minmax(0, 1fr) minmax(0, 0.95fr) minmax(0, 0.95fr) auto;
-    column-gap: 10px;
+    column-gap: 8px;
   }
 
   .title {
@@ -1371,12 +1371,12 @@ button:active {
   }
 
   .stat-box {
-    min-width: 70px;
-    padding: 7px 10px;
+    min-width: 68px;
+    padding: 6px 9px;
   }
 
   .actions {
-    gap: 6px;
+    gap: 5px;
   }
 
   .btn-start,
@@ -1385,7 +1385,7 @@ button:active {
   }
 
   .controls {
-    gap: 8px;
+    gap: 6px;
   }
 }
 
