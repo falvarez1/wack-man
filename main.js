@@ -283,12 +283,15 @@ let levelStats = {
 let lastLevelSummary = null;
 let frameTimeMs = 0;
 let frameTime = 0;
-const hudElement = document.querySelector('.hud');
-const hudToggle = document.getElementById('hud-toggle');
-const hudBackdrop = document.querySelector('.hud-backdrop');
+const hudCompact = document.querySelector('.hud-compact');
+const gameMenu = document.getElementById('game-menu');
+const gameMenuBackdrop = document.querySelector('.game-menu-backdrop');
+const menuBtn = document.getElementById('menu-btn');
+const closeMenuBtn = document.getElementById('close-menu');
 const touchPad = document.getElementById('touch-pad');
 const poopMeter = document.querySelector('.poop-meter');
 const poopMeterFill = document.querySelector('.poop-meter-fill');
+const poopMeterFillCompact = document.querySelector('.poop-meter-fill-compact');
 
 /**
  * Transitions game to a new state
@@ -383,24 +386,26 @@ function queueToast(message, options = {}) {
   });
 }
 
-function setHudCollapsed(collapsed) {
-  if (!hudElement) return;
-  hudElement.classList.toggle('hud-collapsed', collapsed);
-  hudElement.classList.toggle('hud-modal', !collapsed);
-  hudElement.setAttribute('role', collapsed ? 'region' : 'dialog');
-  hudElement.setAttribute('aria-modal', (!collapsed).toString());
+function openGameMenu() {
+  if (!gameMenu || !gameMenuBackdrop) return;
 
-  document.body.classList.toggle('hud-menu-open', !collapsed);
+  gameMenu.classList.add('open');
+  gameMenuBackdrop.classList.add('open');
+  gameMenu.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('hud-menu-open');
+}
 
-  if (hudBackdrop) {
-    hudBackdrop.classList.toggle('open', !collapsed);
-    hudBackdrop.setAttribute('aria-hidden', collapsed ? 'true' : 'false');
-  }
+function closeGameMenu() {
+  if (!gameMenu || !gameMenuBackdrop) return;
 
-  if (hudToggle) {
-    hudToggle.setAttribute('aria-expanded', (!collapsed).toString());
-    hudToggle.setAttribute('aria-label', collapsed ? 'Show game options' : 'Hide game options');
-  }
+  gameMenu.classList.remove('open');
+  gameMenuBackdrop.classList.remove('open');
+  gameMenu.setAttribute('aria-hidden', 'true');
+  document.body.classList.remove('hud-menu-open');
+}
+
+function isGameMenuOpen() {
+  return gameMenu && gameMenu.classList.contains('open');
 }
 
 function syncLayoutWithState() {
@@ -3482,8 +3487,6 @@ function renderLivesDisplay(livesCount) {
 }
 
 function updatePoopMeterUI() {
-  if (!poopMeter || !poopMeterFill) return;
-
   const activePlayers = getActivePlayers();
   let highestMeter = 0;
   let isPooping = false;
@@ -3496,11 +3499,19 @@ function updatePoopMeterUI() {
   });
 
   const ratio = isPooping ? 1 : Math.min(1, highestMeter / POOP_GHOSTS_REQUIRED);
-  poopMeterFill.style.width = `${ratio * 100}%`;
 
-  poopMeter.classList.toggle('is-active', ratio > 0);
-  poopMeter.classList.toggle('is-armed', highestMeter >= POOP_GHOSTS_REQUIRED);
-  poopMeter.classList.toggle('is-counting', onDeadline);
+  // Update compact poop meter
+  if (poopMeterFillCompact) {
+    poopMeterFillCompact.style.width = `${ratio * 100}%`;
+  }
+
+  // Update modal poop meter
+  if (poopMeter && poopMeterFill) {
+    poopMeterFill.style.width = `${ratio * 100}%`;
+    poopMeter.classList.toggle('is-active', ratio > 0);
+    poopMeter.classList.toggle('is-armed', highestMeter >= POOP_GHOSTS_REQUIRED);
+    poopMeter.classList.toggle('is-counting', onDeadline);
+  }
 
   const statusText = isPooping
     ? 'Poop in progress'
@@ -3512,14 +3523,29 @@ function updatePoopMeterUI() {
  * Updates the HUD display with current game stats
  */
 function updateHud() {
-  document.getElementById('p1-score').textContent = players[0].score;
-  document.getElementById('p2-score').textContent = players[1].score;
-  renderLivesDisplay(lives);
-  updatePoopMeterUI();
+  // Update compact HUD (top bar)
+  const p1ScoreCompact = document.getElementById('p1-score-compact');
+  const p2ScoreCompact = document.getElementById('p2-score-compact');
+  const livesCompact = document.getElementById('lives-compact');
+  const highScoreCompact = document.getElementById('high-score-compact');
 
-  // Update high score display if it exists
+  if (p1ScoreCompact) p1ScoreCompact.textContent = players[0].score;
+  if (p2ScoreCompact) p2ScoreCompact.textContent = players[1].score;
+  if (livesCompact) livesCompact.textContent = lives;
+  if (highScoreCompact) highScoreCompact.textContent = highScore;
+
+  // Update modal menu HUD
+  const p1Score = document.getElementById('p1-score');
+  const p2Score = document.getElementById('p2-score');
+  const livesEl = document.getElementById('lives');
   const highScoreEl = document.getElementById('high-score');
+
+  if (p1Score) p1Score.textContent = players[0].score;
+  if (p2Score) p2Score.textContent = players[1].score;
+  if (livesEl) livesEl.textContent = lives;
   if (highScoreEl) highScoreEl.textContent = highScore;
+
+  updatePoopMeterUI();
 }
 
 function updateStartButtonLabel() {
@@ -3897,15 +3923,22 @@ if (closeSettingsButton) {
   closeSettingsButton.addEventListener('click', closeSettings);
 }
 
-if (hudToggle && hudElement) {
-  hudToggle.addEventListener('click', () => {
-    const shouldCollapse = !hudElement.classList.contains('hud-collapsed');
-    setHudCollapsed(shouldCollapse);
+if (menuBtn) {
+  menuBtn.addEventListener('click', () => {
+    openGameMenu();
   });
 }
 
-if (hudBackdrop && hudElement) {
-  hudBackdrop.addEventListener('click', () => setHudCollapsed(true));
+if (closeMenuBtn) {
+  closeMenuBtn.addEventListener('click', () => {
+    closeGameMenu();
+  });
+}
+
+if (gameMenuBackdrop) {
+  gameMenuBackdrop.addEventListener('click', () => {
+    closeGameMenu();
+  });
 }
 
 window.addEventListener('keydown', (e) => {
@@ -3916,10 +3949,9 @@ window.addEventListener('keydown', (e) => {
     return;
   }
 
-  const hudMenuOpen = hudElement && !hudElement.classList.contains('hud-collapsed');
-  if (hudMenuOpen) {
+  if (isGameMenuOpen()) {
     if (e.code === 'Escape') {
-      setHudCollapsed(true);
+      closeGameMenu();
     }
     return;
   }
@@ -4036,7 +4068,7 @@ function startGame() {
   levelStats.startedAt = Date.now();
   levelStats.duration = 0;
   setState(GAME_STATE.READY, READY_STATE_DURATION);
-  setHudCollapsed(true);
+  closeGameMenu();
   queueToast(`Level ${level} ready`, { variant: 'strong' });
   playReadyJingle();
   hasStartedOnce = true;
@@ -4089,7 +4121,7 @@ function resetGame() {
   updateHud();
   setState(GAME_STATE.IDLE);
   updateStartButtonLabel();
-  setHudCollapsed(false);
+  openGameMenu();
 }
 
 const startButton = document.getElementById('start');
@@ -4121,7 +4153,7 @@ if (restartIconButton) {
   restartIconButton.addEventListener('click', () => {
     resetGame();
     startGame();
-    setHudCollapsed(false);
+    closeGameMenu();
   });
 }
 
@@ -4290,7 +4322,7 @@ function updateModeDisplay() {
 precomputeGateSegments();
 initMazeCache();
 resetBoard();
-setHudCollapsed(false);
+closeGameMenu();
 updateHud();
 updateModeDisplay();
 updateStartButtonLabel();
