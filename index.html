@@ -11,68 +11,106 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="mobile-web-app-capable" content="yes" />
   <title>Wack-Man: Neon Maze Showdown</title>
-  <link rel="stylesheet" href="style.css?v=20251224-03" />
+  <link rel="stylesheet" href="style.css?v=20251225-01" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 </head>
 <body>
-  <div class="hud">
-    <div class="hud-row hud-row-top">
-      <div class="title-container">
-        <div class="title">WACK-MAN</div>
-        <div class="subtitle">Neon Maze Showdown</div>
-      </div>
-      <div class="high-score-display">
-        <span class="high-score-label">HIGH SCORE</span>
-        <span id="high-score" class="high-score-value">0</span>
-      </div>
-      <div class="hud-icons" aria-label="Quick controls">
-        <button id="hud-toggle" class="hud-toggle" aria-label="Hide game options" aria-expanded="true" type="button">🎮</button>
-        <button id="settings" class="hud-icon-btn" aria-label="Open settings">⚙️</button>
-        <button id="restart-icon" class="hud-icon-btn" aria-label="Restart game">⟳</button>
+  <!-- Ultra-compact top HUD - always visible -->
+  <div class="hud-compact">
+    <div class="compact-stat">
+      <span class="compact-label">P1</span>
+      <span id="p1-score-compact" class="compact-value p1-color">0</span>
+    </div>
+    <div class="compact-stat">
+      <span class="compact-label">P2</span>
+      <span id="p2-score-compact" class="compact-value p2-color">0</span>
+    </div>
+    <div class="compact-stat">
+      <span class="compact-label">LV</span>
+      <span id="lives-compact" class="compact-value lives-color">3</span>
+    </div>
+    <div class="compact-stat">
+      <span class="compact-label">HI</span>
+      <span id="high-score-compact" class="compact-value hi-color">0</span>
+    </div>
+    <div class="poop-meter-compact" aria-label="Poop meter">
+      <div class="poop-meter-emoji-compact">💩</div>
+      <div class="poop-meter-bar-compact">
+        <div class="poop-meter-fill-compact"></div>
       </div>
     </div>
-    <div class="hud-row hud-row-bottom">
-      <div class="stats">
-        <div class="stat-box">
-          <span class="stat-label">P1</span>
-          <span id="p1-score" class="stat-value p1-color">0</span>
+    <div class="compact-controls">
+      <button id="menu-btn" class="compact-icon-btn" aria-label="Open menu">☰</button>
+      <button id="settings" class="compact-icon-btn" aria-label="Open settings">⚙️</button>
+      <button id="restart-icon" class="compact-icon-btn" aria-label="Restart game">⟳</button>
+    </div>
+  </div>
+
+  <!-- Full Modal Menu - opened via menu button -->
+  <div id="game-menu" class="game-menu" role="dialog" aria-modal="true" aria-labelledby="menu-title" aria-hidden="true">
+    <div class="game-menu-content">
+      <div class="menu-header">
+        <div class="title-container">
+          <div class="title">WACK-MAN</div>
+          <div class="subtitle">Neon Maze Showdown</div>
         </div>
-        <div class="stat-box">
-          <span class="stat-label">P2</span>
-          <span id="p2-score" class="stat-value p2-color">0</span>
-        </div>
-        <div class="stat-box lives-box">
-          <span class="stat-label">LIVES</span>
-          <span id="lives" class="stat-value lives-color">3</span>
-        </div>
+        <button id="close-menu" class="menu-close" aria-label="Close menu">✕</button>
       </div>
-      <div class="poop-meter" aria-label="Poop meter">
-        <div class="poop-meter-emoji" aria-hidden="true">💩</div>
-        <div class="poop-meter-bar" aria-hidden="true">
-          <div class="poop-meter-fill"></div>
+      <div class="menu-body">
+        <div class="menu-section stats-section">
+          <div class="stats-grid">
+            <div class="stat-box">
+              <span class="stat-label">P1 SCORE</span>
+              <span id="p1-score" class="stat-value p1-color">0</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-label">P2 SCORE</span>
+              <span id="p2-score" class="stat-value p2-color">0</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-label">LIVES</span>
+              <span id="lives" class="stat-value lives-color">3</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-label">HIGH SCORE</span>
+              <span id="high-score" class="stat-value hi-color">0</span>
+            </div>
+          </div>
         </div>
-      </div>
-      <div class="controls">
-        <div class="control-group">
-          <span class="player-indicator p1"></span>
-          <span><strong>P1:</strong> Arrow keys</span>
+        <div class="menu-section poop-section">
+          <div class="poop-meter" aria-label="Poop meter">
+            <div class="poop-meter-emoji" aria-hidden="true">💩</div>
+            <div class="poop-meter-bar" aria-hidden="true">
+              <div class="poop-meter-fill"></div>
+            </div>
+          </div>
         </div>
-        <div class="control-group">
-          <span class="player-indicator p2"></span>
-          <span><strong>P2:</strong> WASD</span>
+        <div class="menu-section controls-section">
+          <div class="controls">
+            <div class="control-group">
+              <span class="player-indicator p1"></span>
+              <span><strong>P1:</strong> Arrow keys</span>
+            </div>
+            <div class="control-group">
+              <span class="player-indicator p2"></span>
+              <span><strong>P2:</strong> WASD</span>
+            </div>
+            <div class="control-tip">Swipe on mobile to play!</div>
+          </div>
         </div>
-        <div class="control-tip">Swipe on mobile to play!</div>
-      </div>
-      <div class="actions">
-        <button id="start" class="btn-start" aria-label="Start game">▶ START</button>
-        <button id="pause" class="btn-pause" aria-label="Pause game">⏸</button>
-        <button id="mode" class="btn-mode single-player" aria-label="Toggle single or two player mode">1P</button>
+        <div class="menu-section actions-section">
+          <div class="actions">
+            <button id="start" class="btn-start" aria-label="Start game">▶ START</button>
+            <button id="pause" class="btn-pause" aria-label="Pause game">⏸ PAUSE</button>
+            <button id="mode" class="btn-mode single-player" aria-label="Toggle single or two player mode">1P MODE</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
-  <div class="hud-backdrop" aria-hidden="true"></div>
+  <div class="game-menu-backdrop" aria-hidden="true"></div>
   <div class="canvas-wrap">
     <canvas id="game" width="672" height="720" aria-label="Game canvas" role="application"></canvas>
   </div>
