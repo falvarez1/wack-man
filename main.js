@@ -1612,20 +1612,19 @@ function drawSantaHat(player, angle) {
   const hatHeight = hatSize * 1.2;
 
   // Keyframe-based animations using sine waves for smooth, looping motion
-  // Gentle bounce - vertical oscillation (2 second cycle)
-  const bounceOffset = Math.sin(frameTimeMs / 500) * 2;
+  // Gentle bounce - vertical oscillation (~2 second cycle)
+  const bounceOffset = Math.sin(frameTimeMs / 318) * 2.5;
 
-  // Gentle sway - horizontal oscillation (3 second cycle, offset phase for natural movement)
-  const swayOffset = Math.sin(frameTimeMs / 750 + 1) * 3;
+  // Gentle sway - horizontal oscillation (~2.5 second cycle, offset phase for natural movement)
+  const swayOffset = Math.sin(frameTimeMs / 398 + 1) * 3.5;
 
-  // Rotation sway for more dynamic movement (3.5 second cycle)
-  const swayAngle = Math.sin(frameTimeMs / 875 + 0.5) * 0.08;
+  // Rotation sway for more dynamic movement (~3 second cycle)
+  const swayAngle = Math.sin(frameTimeMs / 477 + 0.5) * 0.1;
 
   ctx.save();
 
-  // Position hat directly on top of player's head
-  // Adjusted to sit more naturally on the character
-  const hatBaseY = -tileSize / 2 - 3 + bounceOffset;
+  // Position hat on top of player's head with slight overlap for natural appearance
+  const hatBaseY = -tileSize / 2 - 2 + bounceOffset;
   const hatTipY = hatBaseY - hatHeight;
 
   // Neutralize player rotation and apply sway animations
@@ -1665,9 +1664,9 @@ function drawSantaHat(player, angle) {
   ctx.ellipse(0, hatBaseY, hatSize / 2 + 2, 4, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // White fluffy pom-pom at tip with its own bounce animation
+  // White fluffy pom-pom at tip with its own bounce animation (~1.8 second cycle)
   const pomPomSize = 5 + Math.sin(frameTimeMs / 150) * 0.5;
-  const pomPomBounce = Math.sin(frameTimeMs / 400) * 1;
+  const pomPomBounce = Math.sin(frameTimeMs / 286 + 0.8) * 1.5;
   ctx.fillStyle = '#FFFFFF';
   ctx.shadowColor = 'rgba(255, 255, 255, 0.8)';
   ctx.shadowBlur = 8;
