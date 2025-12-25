@@ -1365,12 +1365,6 @@ function createPlayer(col, row, color, keys) {
     poopMeter: 0,
     poopDeadline: 0,
     poopingTimer: 0,
-    // Santa hat physics
-    hatBounce: 0,
-    hatBounceVelocity: 0,
-    hatSway: 0,
-    hatSwayVelocity: 0,
-    prevSpeed: 0,
   };
 }
 
@@ -1611,31 +1605,38 @@ function drawGrid() {
 }
 
 /**
- * Draws a festive Santa hat on the player with bounce and sway physics
+ * Draws a festive Santa hat on the player with keyframe-based bounce and sway animations
  */
 function drawSantaHat(player, angle) {
   const hatSize = tileSize * 0.8;
   const hatHeight = hatSize * 1.2;
 
-  // Apply bounce and sway offsets
-  const bounceOffset = player.hatBounce;
-  const swayOffset = player.hatSway;
+  // Keyframe-based animations using sine waves for smooth, looping motion
+  // Gentle bounce - vertical oscillation (~2 second cycle)
+  const bounceOffset = Math.sin(frameTimeMs / 318) * 2.5;
+
+  // Gentle sway - horizontal oscillation (~2.5 second cycle, offset phase for natural movement)
+  const swayOffset = Math.sin(frameTimeMs / 398 + 1) * 3.5;
+
+  // Rotation sway for more dynamic movement (~3 second cycle)
+  const swayAngle = Math.sin(frameTimeMs / 477 + 0.5) * 0.1;
 
   ctx.save();
 
-  // Position hat on top of player's head, accounting for rotation
+  // Position hat on top of player's head with slight overlap for natural appearance
   const hatBaseY = -tileSize / 2 - 2 + bounceOffset;
   const hatTipY = hatBaseY - hatHeight;
 
-  // Rotate based on sway
-  ctx.rotate(-angle); // Neutralize player rotation first
+  // Neutralize player rotation and apply sway animations
+  ctx.rotate(-angle);
   ctx.translate(swayOffset, 0);
+  ctx.rotate(swayAngle);
 
   // Draw hat shadow for depth
   ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
   ctx.beginPath();
   ctx.moveTo(-hatSize / 2, hatBaseY);
-  ctx.lineTo(swayOffset * 0.3, hatTipY);
+  ctx.lineTo(0, hatTipY);
   ctx.lineTo(hatSize / 2, hatBaseY);
   ctx.closePath();
   ctx.fill();
@@ -1663,20 +1664,21 @@ function drawSantaHat(player, angle) {
   ctx.ellipse(0, hatBaseY, hatSize / 2 + 2, 4, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // White fluffy pom-pom at tip with bounce
-  const pomPomSize = 5 + Math.sin(frameTimeMs / 100) * 0.5;
+  // White fluffy pom-pom at tip with its own bounce animation (~1.8 second cycle)
+  const pomPomSize = 5 + Math.sin(frameTimeMs / 150) * 0.5;
+  const pomPomBounce = Math.sin(frameTimeMs / 286 + 0.8) * 1.5;
   ctx.fillStyle = '#FFFFFF';
   ctx.shadowColor = 'rgba(255, 255, 255, 0.8)';
   ctx.shadowBlur = 8;
   ctx.beginPath();
-  ctx.arc(0, hatTipY - 3, pomPomSize, 0, Math.PI * 2);
+  ctx.arc(0, hatTipY - 3 + pomPomBounce, pomPomSize, 0, Math.PI * 2);
   ctx.fill();
 
   // Add some sparkle to pom-pom
   ctx.shadowBlur = 0;
   ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
   ctx.beginPath();
-  ctx.arc(-1, hatTipY - 4, 2, 0, Math.PI * 2);
+  ctx.arc(-1, hatTipY - 4 + pomPomBounce, 2, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.restore();
@@ -2326,35 +2328,6 @@ function movePlayer(player, dt) {
     }
     player.dir = { x: 0, y: 0 };
   }
-
-  // Update Santa hat physics for satisfying bounce and sway
-  const currentSpeed = Math.sqrt(player.dir.x * player.dir.x + player.dir.y * player.dir.y) * speed;
-  const speedChange = currentSpeed - player.prevSpeed;
-
-  // Bounce physics - hat bounces when player accelerates/decelerates
-  if (Math.abs(speedChange) > 0.1) {
-    player.hatBounceVelocity += speedChange * 0.3;
-  }
-
-  // Sway physics - hat sways when changing direction
-  const directionChange = player.dir.x !== 0 ? player.dir.x : player.dir.y;
-  player.hatSwayVelocity += directionChange * speed * 0.015;
-
-  // Apply spring physics for bounce (vertical)
-  const bounceSpring = 0.15;
-  const bounceDamping = 0.85;
-  player.hatBounceVelocity += -player.hatBounce * bounceSpring;
-  player.hatBounceVelocity *= bounceDamping;
-  player.hatBounce += player.hatBounceVelocity * dt * 60;
-
-  // Apply spring physics for sway (horizontal)
-  const swaySpring = 0.12;
-  const swayDamping = 0.88;
-  player.hatSwayVelocity += -player.hatSway * swaySpring;
-  player.hatSwayVelocity *= swayDamping;
-  player.hatSway += player.hatSwayVelocity * dt * 60;
-
-  player.prevSpeed = currentSpeed;
 
   wrapPosition(player);
   eatPellet(player);
