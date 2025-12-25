@@ -115,6 +115,12 @@ const COMBO_CALLUPS_DESC = [...COMBO_CALLUPS].sort((a, b) => b.threshold - a.thr
 const MAX_FRAME_STEP = 1 / 60; // Fixed simulation step (~16.67ms) to avoid hitch-based speed spikes
 const MAX_ACCUMULATED_TIME = 0.25; // Cap to avoid spiral of death on long pauses
 
+// Christmas lights configuration
+const CHRISTMAS_LIGHT_COLORS = ['#ff0000', '#00ff00', '#0080ff', '#ffff00', '#ffffff', '#ff6600'];
+const CHRISTMAS_LIGHT_SPACING = 3; // Place light every N tiles along walls
+const CHRISTMAS_LIGHT_SIZE = 4;
+const CHRISTMAS_LIGHT_GLOW = 8;
+
 // Showcase messaging for attract-mode vibes
 const ATTRACT_MESSAGES = [
   { title: 'NEON MAZE SHOWDOWN', subtitle: 'Swipe or press start to dive in' },
@@ -573,6 +579,99 @@ function ensureMazeCache() {
       mazeCacheCtx = null;
     }
   }
+}
+
+// ==================== CHRISTMAS LIGHTS SYSTEM ====================
+let christmasLights = [];
+
+/**
+ * Initializes Christmas lights along the maze walls
+ */
+function initChristmasLights() {
+  christmasLights = [];
+  let lightIndex = 0;
+
+  layout.forEach((row, y) => {
+    [...row].forEach((cell, x) => {
+      if (cell === 'W') {
+        // Check if this wall tile should have a light
+        // Create a deterministic pattern based on position
+        const shouldPlaceLight = (x + y) % CHRISTMAS_LIGHT_SPACING === 0;
+
+        if (shouldPlaceLight) {
+          // Check if adjacent to an open space (edge of wall)
+          const hasOpenNeighbor =
+            !isWall(x - 1, y) || !isWall(x + 1, y) ||
+            !isWall(x, y - 1) || !isWall(x, y + 1);
+
+          if (hasOpenNeighbor) {
+            const px = x * tileSize + tileSize / 2;
+            const py = y * tileSize + tileSize / 2;
+            const colorIndex = lightIndex % CHRISTMAS_LIGHT_COLORS.length;
+
+            christmasLights.push({
+              x: px,
+              y: py,
+              color: CHRISTMAS_LIGHT_COLORS[colorIndex],
+              phase: lightIndex * 0.3, // Offset for cascading blink effect
+              blinkSpeed: 0.003 + (lightIndex % 3) * 0.001 // Varied blink speeds
+            });
+
+            lightIndex++;
+          }
+        }
+      }
+    });
+  });
+}
+
+/**
+ * Draws Christmas lights with festive blinking animation
+ */
+function drawChristmasLights() {
+  const nowMs = frameTimeMs;
+
+  christmasLights.forEach((light, idx) => {
+    // Create cascading blink pattern using sine waves with phase offset
+    const blinkValue = Math.sin(nowMs * light.blinkSpeed + light.phase);
+    const brightness = (blinkValue + 1) / 2; // Normalize to 0-1
+
+    // Lights are brighter when "on" in the blink cycle
+    const isOn = blinkValue > -0.3;
+    const intensity = isOn ? 0.7 + brightness * 0.3 : 0.2 + brightness * 0.3;
+
+    ctx.save();
+
+    // Draw glow
+    if (isOn) {
+      const glowSize = CHRISTMAS_LIGHT_GLOW * (0.8 + brightness * 0.4);
+      const gradient = ctx.createRadialGradient(light.x, light.y, 0, light.x, light.y, glowSize);
+      gradient.addColorStop(0, `${light.color}${Math.floor(intensity * 100).toString(16).padStart(2, '0')}`);
+      gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(light.x - glowSize, light.y - glowSize, glowSize * 2, glowSize * 2);
+    }
+
+    // Draw light bulb
+    ctx.shadowColor = light.color;
+    ctx.shadowBlur = isOn ? 12 * brightness : 4;
+    ctx.fillStyle = light.color;
+    ctx.globalAlpha = intensity;
+    ctx.beginPath();
+    ctx.arc(light.x, light.y, CHRISTMAS_LIGHT_SIZE, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Add highlight for depth
+    if (isOn) {
+      ctx.globalAlpha = intensity * 0.8;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(light.x - 1, light.y - 1, CHRISTMAS_LIGHT_SIZE * 0.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+  });
 }
 
 // ==================== PARTICLE SYSTEM ====================
@@ -1266,6 +1365,12 @@ function createPlayer(col, row, color, keys) {
     poopMeter: 0,
     poopDeadline: 0,
     poopingTimer: 0,
+    // Santa hat physics
+    hatBounce: 0,
+    hatBounceVelocity: 0,
+    hatSway: 0,
+    hatSwayVelocity: 0,
+    prevSpeed: 0,
   };
 }
 
@@ -1505,6 +1610,78 @@ function drawGrid() {
   ctx.restore();
 }
 
+/**
+ * Draws a festive Santa hat on the player with bounce and sway physics
+ */
+function drawSantaHat(player, angle) {
+  const hatSize = tileSize * 0.8;
+  const hatHeight = hatSize * 1.2;
+
+  // Apply bounce and sway offsets
+  const bounceOffset = player.hatBounce;
+  const swayOffset = player.hatSway;
+
+  ctx.save();
+
+  // Position hat on top of player's head, accounting for rotation
+  const hatBaseY = -tileSize / 2 - 2 + bounceOffset;
+  const hatTipY = hatBaseY - hatHeight;
+
+  // Rotate based on sway
+  ctx.rotate(-angle); // Neutralize player rotation first
+  ctx.translate(swayOffset, 0);
+
+  // Draw hat shadow for depth
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+  ctx.beginPath();
+  ctx.moveTo(-hatSize / 2, hatBaseY);
+  ctx.lineTo(swayOffset * 0.3, hatTipY);
+  ctx.lineTo(hatSize / 2, hatBaseY);
+  ctx.closePath();
+  ctx.fill();
+
+  // Draw main red hat body
+  ctx.fillStyle = '#DC143C'; // Crimson red
+  ctx.beginPath();
+  ctx.moveTo(-hatSize / 2, hatBaseY);
+  ctx.lineTo(0, hatTipY);
+  ctx.lineTo(hatSize / 2, hatBaseY);
+  ctx.closePath();
+  ctx.fill();
+
+  // Add gradient for depth
+  const hatGradient = ctx.createLinearGradient(-hatSize / 2, hatBaseY, hatSize / 2, hatBaseY);
+  hatGradient.addColorStop(0, 'rgba(180, 0, 0, 0.3)');
+  hatGradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.1)');
+  hatGradient.addColorStop(1, 'rgba(100, 0, 0, 0.3)');
+  ctx.fillStyle = hatGradient;
+  ctx.fill();
+
+  // White fluffy trim at base
+  ctx.fillStyle = '#FFFFFF';
+  ctx.beginPath();
+  ctx.ellipse(0, hatBaseY, hatSize / 2 + 2, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // White fluffy pom-pom at tip with bounce
+  const pomPomSize = 5 + Math.sin(frameTimeMs / 100) * 0.5;
+  ctx.fillStyle = '#FFFFFF';
+  ctx.shadowColor = 'rgba(255, 255, 255, 0.8)';
+  ctx.shadowBlur = 8;
+  ctx.beginPath();
+  ctx.arc(0, hatTipY - 3, pomPomSize, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Add some sparkle to pom-pom
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+  ctx.beginPath();
+  ctx.arc(-1, hatTipY - 4, 2, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
 function drawPlayers() {
   const nowMs = frameTimeMs;
 
@@ -1676,6 +1853,9 @@ function drawPlayers() {
         createParticle(sparkleX, sparkleY, POWERUP_TYPES.HANDS.color, 'star');
       }
     }
+
+    // Draw festive Santa hat
+    drawSantaHat(p, angle);
 
     ctx.shadowBlur = 0;
     ctx.restore();
@@ -2146,6 +2326,35 @@ function movePlayer(player, dt) {
     }
     player.dir = { x: 0, y: 0 };
   }
+
+  // Update Santa hat physics for satisfying bounce and sway
+  const currentSpeed = Math.sqrt(player.dir.x * player.dir.x + player.dir.y * player.dir.y) * speed;
+  const speedChange = currentSpeed - player.prevSpeed;
+
+  // Bounce physics - hat bounces when player accelerates/decelerates
+  if (Math.abs(speedChange) > 0.1) {
+    player.hatBounceVelocity += speedChange * 0.3;
+  }
+
+  // Sway physics - hat sways when changing direction
+  const directionChange = player.dir.x !== 0 ? player.dir.x : player.dir.y;
+  player.hatSwayVelocity += directionChange * speed * 0.015;
+
+  // Apply spring physics for bounce (vertical)
+  const bounceSpring = 0.15;
+  const bounceDamping = 0.85;
+  player.hatBounceVelocity += -player.hatBounce * bounceSpring;
+  player.hatBounceVelocity *= bounceDamping;
+  player.hatBounce += player.hatBounceVelocity * dt * 60;
+
+  // Apply spring physics for sway (horizontal)
+  const swaySpring = 0.12;
+  const swayDamping = 0.88;
+  player.hatSwayVelocity += -player.hatSway * swaySpring;
+  player.hatSwayVelocity *= swayDamping;
+  player.hatSway += player.hatSwayVelocity * dt * 60;
+
+  player.prevSpeed = currentSpeed;
 
   wrapPosition(player);
   eatPellet(player);
@@ -3449,6 +3658,7 @@ function loop(timestamp) {
     }
 
     drawGrid();
+    drawChristmasLights(); // Draw festive blinking Christmas lights
     drawRespawnBeams();
     drawPoops();
     drawPlayers();
@@ -4118,6 +4328,7 @@ function resetGame() {
 
   resetBoard();
   resetPositions();
+  initChristmasLights(); // Initialize festive Christmas lights
   updateHud();
   setState(GAME_STATE.IDLE);
   updateStartButtonLabel();
@@ -4322,6 +4533,7 @@ function updateModeDisplay() {
 precomputeGateSegments();
 initMazeCache();
 resetBoard();
+initChristmasLights(); // Initialize festive Christmas lights
 closeGameMenu();
 updateHud();
 updateModeDisplay();
