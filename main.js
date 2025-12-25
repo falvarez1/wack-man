@@ -1623,14 +1623,16 @@ function drawSantaHat(player) {
   const hatX = player.x + swayOffset;
   const hatY = player.y - tileSize / 2 - 3 + bounceOffset;
 
-  ctx.translate(hatX, hatY);
+  // Rotate based on sway
+  ctx.rotate(-angle); // Neutralize player rotation first
+  ctx.translate(swayOffset, 0);
 
   // Draw main red hat body
   ctx.fillStyle = '#DC143C'; // Crimson red
   ctx.beginPath();
-  ctx.moveTo(-hatSize / 2, 0);
-  ctx.lineTo(0, -hatHeight);
-  ctx.lineTo(hatSize / 2, 0);
+  ctx.moveTo(-hatSize / 2, hatBaseY);
+  ctx.lineTo(0, hatTipY);
+  ctx.lineTo(hatSize / 2, hatBaseY);
   ctx.closePath();
   ctx.fill();
 
@@ -1839,11 +1841,11 @@ function drawPlayers() {
       }
     }
 
+    // Draw festive Santa hat
+    drawSantaHat(p, angle);
+
     ctx.shadowBlur = 0;
     ctx.restore();
-
-    // Draw festive Santa hat (drawn in world space, after player transform)
-    drawSantaHat(p);
   });
 }
 
