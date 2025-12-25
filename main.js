@@ -1613,9 +1613,9 @@ function drawGrid() {
 /**
  * Draws a festive Santa hat on the player with bounce and sway physics
  */
-function drawSantaHat(player) {
-  const hatSize = tileSize * 0.65;
-  const hatHeight = hatSize * 1.1;
+function drawSantaHat(player, angle) {
+  const hatSize = tileSize * 0.8;
+  const hatHeight = hatSize * 1.2;
 
   // Apply bounce and sway offsets
   const bounceOffset = player.hatBounce;
@@ -1623,33 +1623,34 @@ function drawSantaHat(player) {
 
   ctx.save();
 
-  // Position hat in world space directly on player's head
-  const hatX = player.x + swayOffset;
-  const hatY = player.y - tileSize / 2 - 2 + bounceOffset;
-  const hatTipY = hatY - hatHeight;
+  // Position hat on top of player's head, accounting for rotation
+  const hatBaseY = -tileSize / 2 - 2 + bounceOffset;
+  const hatTipY = hatBaseY - hatHeight;
 
-  ctx.translate(hatX, hatY);
+  // Rotate based on sway
+  ctx.rotate(-angle); // Neutralize player rotation first
+  ctx.translate(swayOffset, 0);
 
   // Draw hat shadow for depth
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
   ctx.beginPath();
-  ctx.moveTo(-hatSize / 2, 0);
-  ctx.lineTo(swayOffset * 0.1, -hatHeight);
-  ctx.lineTo(hatSize / 2, 0);
+  ctx.moveTo(-hatSize / 2, hatBaseY);
+  ctx.lineTo(swayOffset * 0.3, hatTipY);
+  ctx.lineTo(hatSize / 2, hatBaseY);
   ctx.closePath();
   ctx.fill();
 
   // Draw main red hat body
   ctx.fillStyle = '#DC143C'; // Crimson red
   ctx.beginPath();
-  ctx.moveTo(-hatSize / 2, 0);
-  ctx.lineTo(0, -hatHeight);
-  ctx.lineTo(hatSize / 2, 0);
+  ctx.moveTo(-hatSize / 2, hatBaseY);
+  ctx.lineTo(0, hatTipY);
+  ctx.lineTo(hatSize / 2, hatBaseY);
   ctx.closePath();
   ctx.fill();
 
   // Add gradient for depth
-  const hatGradient = ctx.createLinearGradient(-hatSize / 2, 0, hatSize / 2, 0);
+  const hatGradient = ctx.createLinearGradient(-hatSize / 2, hatBaseY, hatSize / 2, hatBaseY);
   hatGradient.addColorStop(0, 'rgba(180, 0, 0, 0.3)');
   hatGradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.1)');
   hatGradient.addColorStop(1, 'rgba(100, 0, 0, 0.3)');
@@ -1659,23 +1660,23 @@ function drawSantaHat(player) {
   // White fluffy trim at base
   ctx.fillStyle = '#FFFFFF';
   ctx.beginPath();
-  ctx.ellipse(0, 0, hatSize / 2 + 2, 3.5, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, hatBaseY, hatSize / 2 + 2, 4, 0, 0, Math.PI * 2);
   ctx.fill();
 
   // White fluffy pom-pom at tip with bounce
-  const pomPomSize = 4 + Math.sin(frameTimeMs / 100) * 0.5;
+  const pomPomSize = 5 + Math.sin(frameTimeMs / 100) * 0.5;
   ctx.fillStyle = '#FFFFFF';
   ctx.shadowColor = 'rgba(255, 255, 255, 0.8)';
   ctx.shadowBlur = 8;
   ctx.beginPath();
-  ctx.arc(0, -hatHeight - 2, pomPomSize, 0, Math.PI * 2);
+  ctx.arc(0, hatTipY - 3, pomPomSize, 0, Math.PI * 2);
   ctx.fill();
 
   // Add some sparkle to pom-pom
   ctx.shadowBlur = 0;
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
   ctx.beginPath();
-  ctx.arc(-1, -hatHeight - 3, 1.5, 0, Math.PI * 2);
+  ctx.arc(-1, hatTipY - 4, 2, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.restore();
@@ -1853,11 +1854,11 @@ function drawPlayers() {
       }
     }
 
+    // Draw festive Santa hat
+    drawSantaHat(p, angle);
+
     ctx.shadowBlur = 0;
     ctx.restore();
-
-    // Draw festive Santa hat (drawn in world space, after player transform)
-    drawSantaHat(p);
   });
 }
 
